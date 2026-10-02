@@ -63,7 +63,25 @@ npm run android
 npm run web
 ```
 
-## 6. Cómo se guardan los entrenamientos
+## 6. Subir cambios a GitHub
+
+Para publicar cambios necesitas tener Git instalado, abrir en VS Code una copia clonada del repositorio y haber iniciado sesión en GitHub. En la terminal, revisa primero qué archivos cambiaron:
+
+```powershell
+git status
+```
+
+Agrega solo los archivos que quieras publicar, crea un commit y envíalo a la rama `main`:
+
+```powershell
+git add App.tsx database.ts types.ts README.md
+git commit -m "mostrar detalle del historial"
+git push origin main
+```
+
+Si cambiaste otros archivos, agrégalos también con `git add` antes de crear el commit. No agregues `node_modules`; sus dependencias se instalan en cada computadora con `npm install`.
+
+## 7. Cómo se guardan los entrenamientos
 
 La base local `gym_tracker.db` se inicializa automáticamente al abrir la aplicación. Guarda las sesiones en tablas relacionadas de entrenamientos, ejercicios/series y cardio; no hace falta crear las tablas manualmente.
 

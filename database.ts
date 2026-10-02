@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import type { Cardio, Ejercicio, SesionEntrenamiento } from './types';
+import type { Cardio, CardioLog, Ejercicio, ExerciseLog, SesionEntrenamiento, Workout, WorkoutDetails } from './types';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -11,6 +11,10 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
     void dbInitialization.catch(() => { dbInitialization = null; });
   }
   return dbInitialization;
+}
+
+export async function initDatabase(): Promise<void> {
+  await getDatabase();
 }
 
 async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -119,41 +123,150 @@ async function insertCardio(
 }
 
 export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> {
+  await saveWorkout(
+    {
+      clientId: sesion.id,
+      date: sesion.fecha,
+      weekType: sesion.tipoSemana,
+      durationSeconds: sesion.duracionSegundos,
+    },
+    sesion.ejercicios.flatMap((exercise, exerciseOrder) =>
+      exercise.series.map((set, setIndex) => ({
+        exerciseId: exercise.id,
+        exerciseOrder,
+        setId: set.id,
+        exerciseName: exercise.nombre,
+        muscleGroup: 'General',
+        setNumber: setIndex + 1,
+        reps: set.reps,
+        weight: set.pesoKg,
+      })),
+    ),
+    sesion.cardio
+      ? {
+          cardioType: sesion.cardio.modalidad,
+          level: sesion.cardio.velocidadNivel,
+          distanceKm: sesion.cardio.distanciaKm,
+          durationMinutes: sesion.cardio.tiempoMin,
+        }
+      : undefined,
+  );
+}
+
+export async function saveWorkout(
+  workout: Omit<Workout, 'id'>,
+  exercises: Omit<ExerciseLog, 'id' | 'workoutId'>[],
+  cardio?: Omit<CardioLog, 'id' | 'workoutId'>,
+): Promise<number> {
   const db = await getDatabase();
-  await db.withTransactionAsync(async () => {
-    const transaction = db;
-    const result = await transaction.runAsync(
-      `INSERT INTO workouts (client_id, date, week_type, duration_seconds)
-       VALUES (?, ?, ?, ?);`,
-      [sesion.id, sesion.fecha, sesion.tipoSemana, sesion.duracionSegundos],
-    );
-    const workoutId = result.lastInsertRowId;
-    for (const [exerciseOrder, exercise] of sesion.ejercicios.entries()) {
-      for (const [setIndex, set] of exercise.series.entries()) {
-        await transaction.runAsync(
+  let workoutId = 0;
+  try {
+    await db.withTransactionAsync(async () => {
+      const result = await db.runAsync(
+        `INSERT INTO workouts (client_id, date, week_type, notes, duration_seconds)
+         VALUES (?, ?, ?, ?, ?);`,
+        [workout.clientId ?? createClientId(), workout.date, workout.weekType, workout.notes ?? null, workout.durationSeconds ?? 0],
+      );
+      workoutId = result.lastInsertRowId;
+      for (const [index, exercise] of exercises.entries()) {
+        await db.runAsync(
           `INSERT INTO exercise_logs (
             workout_id, exercise_id, exercise_order, exercise_name,
             muscle_group, set_id, set_number, reps, weight
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-          [workoutId, exercise.id, exerciseOrder, exercise.nombre, 'General', set.id, setIndex + 1, set.reps, set.pesoKg],
+          [
+            workoutId,
+            exercise.exerciseId ?? `exercise-${index}`,
+            exercise.exerciseOrder ?? index,
+            exercise.exerciseName,
+            exercise.muscleGroup,
+            exercise.setId ?? `${index}-${exercise.setNumber}`,
+            exercise.setNumber,
+            exercise.reps,
+            exercise.weight,
+          ],
         );
       }
-    }
-    if (sesion.cardio) await insertCardio(transaction, workoutId, sesion.cardio);
-  });
+      if (cardio) {
+        await db.runAsync(
+          `INSERT INTO cardio_logs (workout_id, cardio_type, level, distance_km, duration_minutes)
+           VALUES (?, ?, ?, ?, ?);`,
+          [workoutId, cardio.cardioType, cardio.level ?? null, cardio.distanceKm ?? null, cardio.durationMinutes],
+        );
+      }
+    });
+    return workoutId;
+  } catch (error) {
+    console.error('Error al guardar el entrenamiento:', error);
+    throw error;
+  }
+}
+
+function createClientId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export async function getWorkoutsHistory(): Promise<(Workout & { id: number })[]> {
+  try {
+    const db = await getDatabase();
+    const workouts = await db.getAllAsync<{
+      id: number;
+      clientId: string;
+      date: string;
+      weekType: Workout['weekType'];
+      notes: string | null;
+      durationSeconds: number;
+    }>(
+      `SELECT id, client_id AS clientId, date,
+              week_type AS weekType, notes, duration_seconds AS durationSeconds
+       FROM workouts ORDER BY date DESC, id DESC;`,
+    );
+    return workouts.map(({ notes, ...workout }) => ({
+      ...workout,
+      ...(notes === null ? {} : { notes }),
+    }));
+  } catch (error) {
+    console.error('Error al obtener el historial:', error);
+    return [];
+  }
+}
+
+export async function getWorkoutDetails(workoutId: number | string): Promise<WorkoutDetails> {
+  try {
+    const db = await getDatabase();
+    const workout = await db.getFirstAsync<{ id: number }>(
+      'SELECT id FROM workouts WHERE id = ? OR client_id = ? LIMIT 1;',
+      [typeof workoutId === 'number' ? workoutId : -1, String(workoutId)],
+    );
+    if (!workout) return { exercises: [], cardio: [] };
+
+    const exercises = await db.getAllAsync<ExerciseLog>(
+      `SELECT workout_id AS workoutId, exercise_id AS exerciseId,
+              exercise_order AS exerciseOrder, exercise_name AS exerciseName,
+              muscle_group AS muscleGroup, set_id AS setId,
+              set_number AS setNumber, reps, weight
+       FROM exercise_logs WHERE workout_id = ?
+       ORDER BY exercise_order, set_number;`,
+      [workout.id],
+    );
+    const cardio = await db.getAllAsync<CardioLog>(
+      `SELECT workout_id AS workoutId, cardio_type AS cardioType,
+              level, distance_km AS distanceKm,
+              duration_minutes AS durationMinutes
+       FROM cardio_logs WHERE workout_id = ?;`,
+      [workout.id],
+    );
+
+    return { exercises, cardio };
+  } catch (error) {
+    console.error('Error al obtener el detalle del entrenamiento:', error);
+    return { exercises: [], cardio: [] };
+  }
 }
 
 export async function obtenerSesiones(): Promise<SesionEntrenamiento[]> {
   const db = await getDatabase();
-  const workouts = await db.getAllAsync<{
-    id: number;
-    client_id: string;
-    date: string;
-    week_type: 'carga' | 'descarga';
-    duration_seconds: number;
-  }>(
-    'SELECT id, client_id, date, week_type, duration_seconds FROM workouts ORDER BY date DESC, id DESC;',
-  );
+  const workouts = await getWorkoutsHistory();
   const exerciseRows = await db.getAllAsync<{
     id: number;
     workout_id: number;
@@ -203,14 +316,15 @@ export async function obtenerSesiones(): Promise<SesionEntrenamiento[]> {
   }
 
   return workouts.map((workout) => {
-    const workoutExercises = [...(exercisesByWorkout.get(workout.id)?.values() ?? [])];
+    const workoutId = workout.id;
+    const workoutExercises = [...(exercisesByWorkout.get(workoutId)?.values() ?? [])];
     return {
-      id: workout.client_id,
+      id: workout.clientId ?? String(workoutId),
       fecha: workout.date,
-      duracionSegundos: workout.duration_seconds,
-      tipoSemana: workout.week_type,
+      duracionSegundos: workout.durationSeconds ?? 0,
+      tipoSemana: workout.weekType,
       ejercicios: workoutExercises,
-      cardio: cardioByWorkout.get(workout.id) ?? null,
+      cardio: cardioByWorkout.get(workoutId) ?? null,
     };
   });
 }
