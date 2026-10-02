@@ -17,6 +17,14 @@ export async function initDatabase(): Promise<void> {
   await getDatabase();
 }
 
+export function getIsoWeekNumber(dateValue: string): number {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
 async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync('gym_tracker.db');
   try {
@@ -28,6 +36,7 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         client_id TEXT NOT NULL UNIQUE,
         date TEXT NOT NULL,
         week_type TEXT NOT NULL CHECK (week_type IN ('carga', 'descarga')),
+        cycle_week INTEGER NOT NULL DEFAULT 1 CHECK (cycle_week >= 1),
         notes TEXT,
         duration_seconds INTEGER NOT NULL DEFAULT 0
       );
@@ -55,6 +64,8 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE
       );
     `);
+    await migrateCycleWeekColumn(db);
+    await migrateAutomaticCycleWeeks(db);
     await migrateLegacySessions(db);
     dbInstance = db;
     return db;
@@ -62,6 +73,29 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await db.closeAsync().catch(() => undefined);
     throw error;
   }
+}
+
+async function migrateCycleWeekColumn(db: SQLite.SQLiteDatabase): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(workouts);');
+  if (!columns.some((column) => column.name === 'cycle_week')) {
+    await db.execAsync('ALTER TABLE workouts ADD COLUMN cycle_week INTEGER NOT NULL DEFAULT 1;');
+  }
+}
+
+async function migrateAutomaticCycleWeeks(db: SQLite.SQLiteDatabase): Promise<void> {
+  const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+  if ((version?.user_version ?? 0) >= 1) return;
+
+  const workouts = await db.getAllAsync<{ id: number; date: string }>('SELECT id, date FROM workouts;');
+  await db.withTransactionAsync(async () => {
+    for (const workout of workouts) {
+      const cycleWeek = getIsoWeekNumber(workout.date);
+      if (Number.isInteger(cycleWeek) && cycleWeek > 0) {
+        await db.runAsync('UPDATE workouts SET cycle_week = ? WHERE id = ?;', [cycleWeek, workout.id]);
+      }
+    }
+    await db.execAsync('PRAGMA user_version = 1;');
+  });
 }
 
 async function migrateLegacySessions(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -85,9 +119,9 @@ async function migrateLegacySessions(db: SQLite.SQLiteDatabase): Promise<void> {
       if (!session.id || !Array.isArray(session.ejercicios)) continue;
 
       const inserted = await transaction.runAsync(
-        `INSERT OR IGNORE INTO workouts (client_id, date, week_type, duration_seconds)
-         VALUES (?, ?, ?, ?);`,
-        [session.id, session.fecha, session.tipoSemana, session.duracionSegundos],
+        `INSERT OR IGNORE INTO workouts (client_id, date, week_type, cycle_week, notes, duration_seconds)
+         VALUES (?, ?, ?, ?, ?, ?);`,
+        [session.id, session.fecha, session.tipoSemana, getIsoWeekNumber(session.fecha), session.notas ?? null, session.duracionSegundos],
       );
       if (inserted.changes === 0) continue;
 
@@ -128,6 +162,7 @@ export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> 
       clientId: sesion.id,
       date: sesion.fecha,
       weekType: sesion.tipoSemana,
+      notes: sesion.notas,
       durationSeconds: sesion.duracionSegundos,
     },
     sesion.ejercicios.flatMap((exercise, exerciseOrder) =>
@@ -136,7 +171,7 @@ export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> 
         exerciseOrder,
         setId: set.id,
         exerciseName: exercise.nombre,
-        muscleGroup: 'General',
+        muscleGroup: exercise.grupoMuscular?.trim() || 'General',
         setNumber: setIndex + 1,
         reps: set.reps,
         weight: set.pesoKg,
@@ -154,7 +189,7 @@ export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> 
 }
 
 export async function saveWorkout(
-  workout: Omit<Workout, 'id'>,
+  workout: Omit<Workout, 'id' | 'cycleWeek'>,
   exercises: Omit<ExerciseLog, 'id' | 'workoutId'>[],
   cardio?: Omit<CardioLog, 'id' | 'workoutId'>,
 ): Promise<number> {
@@ -163,9 +198,9 @@ export async function saveWorkout(
   try {
     await db.withTransactionAsync(async () => {
       const result = await db.runAsync(
-        `INSERT INTO workouts (client_id, date, week_type, notes, duration_seconds)
-         VALUES (?, ?, ?, ?, ?);`,
-        [workout.clientId ?? createClientId(), workout.date, workout.weekType, workout.notes ?? null, workout.durationSeconds ?? 0],
+        `INSERT INTO workouts (client_id, date, week_type, cycle_week, notes, duration_seconds)
+         VALUES (?, ?, ?, ?, ?, ?);`,
+        [workout.clientId ?? createClientId(), workout.date, workout.weekType, getIsoWeekNumber(workout.date), workout.notes ?? null, workout.durationSeconds ?? 0],
       );
       workoutId = result.lastInsertRowId;
       for (const [index, exercise] of exercises.entries()) {
@@ -214,15 +249,18 @@ export async function getWorkoutsHistory(): Promise<(Workout & { id: number })[]
       clientId: string;
       date: string;
       weekType: Workout['weekType'];
+      cycleWeek: number;
       notes: string | null;
       durationSeconds: number;
     }>(
-      `SELECT id, client_id AS clientId, date,
-              week_type AS weekType, notes, duration_seconds AS durationSeconds
+          `SELECT id, client_id AS clientId, date,
+              week_type AS weekType, cycle_week AS cycleWeek,
+              notes, duration_seconds AS durationSeconds
        FROM workouts ORDER BY date DESC, id DESC;`,
     );
     return workouts.map(({ notes, ...workout }) => ({
       ...workout,
+      cycleWeek: getIsoWeekNumber(workout.date),
       ...(notes === null ? {} : { notes }),
     }));
   } catch (error) {
@@ -273,12 +311,13 @@ export async function obtenerSesiones(): Promise<SesionEntrenamiento[]> {
     exercise_id: string;
     exercise_order: number;
     exercise_name: string;
+    muscle_group: string;
     set_id: string;
     set_number: number;
     reps: number;
     weight: number;
   }>(
-    'SELECT id, workout_id, exercise_id, exercise_order, exercise_name, set_id, set_number, reps, weight FROM exercise_logs ORDER BY workout_id, exercise_order, set_number;',
+    'SELECT id, workout_id, exercise_id, exercise_order, exercise_name, muscle_group, set_id, set_number, reps, weight FROM exercise_logs ORDER BY workout_id, exercise_order, set_number;',
   );
   const cardioRows = await db.getAllAsync<{
     workout_id: number;
@@ -297,7 +336,7 @@ export async function obtenerSesiones(): Promise<SesionEntrenamiento[]> {
     }
     let exercise = exercises.get(row.exercise_id);
     if (!exercise) {
-      exercise = { id: row.exercise_id, nombre: row.exercise_name, series: [] };
+      exercise = { id: row.exercise_id, nombre: row.exercise_name, grupoMuscular: row.muscle_group, series: [] };
       exercises.set(row.exercise_id, exercise);
     }
     exercise.series.push({ id: row.set_id || String(row.id), reps: row.reps, pesoKg: row.weight });
@@ -321,8 +360,10 @@ export async function obtenerSesiones(): Promise<SesionEntrenamiento[]> {
     return {
       id: workout.clientId ?? String(workoutId),
       fecha: workout.date,
+      ...(workout.notes ? { notas: workout.notes } : {}),
       duracionSegundos: workout.durationSeconds ?? 0,
       tipoSemana: workout.weekType,
+      cycleWeek: workout.cycleWeek,
       ejercicios: workoutExercises,
       cardio: cardioByWorkout.get(workoutId) ?? null,
     };

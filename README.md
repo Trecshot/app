@@ -75,7 +75,7 @@ Agrega solo los archivos que quieras publicar, crea un commit y envíalo a la ra
 
 ```powershell
 git add App.tsx database.ts types.ts README.md
-git commit -m "mostrar detalle del historial"
+git commit -m "agregar flujo de sesion activa"
 git push origin main
 ```
 
@@ -83,9 +83,11 @@ Si cambiaste otros archivos, agrégalos también con `git add` antes de crear el
 
 ## 7. Cómo se guardan los entrenamientos
 
-La base local `gym_tracker.db` se inicializa automáticamente al abrir la aplicación. Guarda las sesiones en tablas relacionadas de entrenamientos, ejercicios/series y cardio; no hace falta crear las tablas manualmente.
+La base local `gym_tracker.db` se inicializa automáticamente al abrir la aplicación. Guarda las sesiones en tablas relacionadas de entrenamientos, ejercicios/series y cardio; no hace falta crear las tablas manualmente. En el formulario puedes cambiar la fecha (formato `AAAA-MM-DD`), agregar notas opcionales y especificar un grupo muscular para cada ejercicio. La semana ISO del año se calcula automáticamente a partir de la fecha y aparece en el historial; ya no hay un contador manual de semana del ciclo.
 
-Si el dispositivo ya tenía sesiones guardadas en el formato anterior, la aplicación intenta importarlas automáticamente la primera vez que abre la nueva base. Los registros nuevos y los eliminados se guardan en la base local del dispositivo. Desinstalar la app o borrar sus datos puede eliminar esos registros.
+Para registrar una sesión, pulsa **Comenzar**. Puedes pausarla y reanudarla con el mismo control; **Finalizar entrenamiento** detiene el cronómetro, guarda ejercicios, series y cardio, y limpia el formulario para la siguiente sesión. El botón para finalizar se activa después de comenzar la sesión.
+
+Si el dispositivo ya tenía sesiones guardadas en el formato anterior, la aplicación intenta importarlas automáticamente la primera vez que abre la nueva base. La columna `cycle_week` se conserva por compatibilidad con la base instalada, pero su valor se calcula usando la semana ISO de la fecha de cada sesión. Los registros nuevos y los eliminados se guardan en la base local del dispositivo. Desinstalar la app o borrar sus datos puede eliminar esos registros.
 
 ## Problemas frecuentes
 

@@ -5,6 +5,7 @@ export interface Workout {
   clientId?: string;
   date: string;
   weekType: WeekType;
+  cycleWeek: number;
   notes?: string;
   durationSeconds?: number;
 }
@@ -45,6 +46,7 @@ export interface Serie {
 export interface Ejercicio {
   id: string;
   nombre: string;
+  grupoMuscular?: string;
   series: Serie[];
 }
 
@@ -59,8 +61,10 @@ export interface Cardio {
 export interface SesionEntrenamiento {
   id: string;
   fecha: string;
+  notas?: string;
   duracionSegundos: number;
   tipoSemana: 'carga' | 'descarga';
+  cycleWeek: number;
   ejercicios: Ejercicio[];
   cardio: Cardio | null;
 }
