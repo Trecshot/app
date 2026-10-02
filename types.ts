@@ -37,6 +37,14 @@ export interface WorkoutDetails {
   cardio: CardioLog[];
 }
 
+export interface WeeklySummary {
+  weekYear: number;
+  cycleWeek: number;
+  weekType: WeekType;
+  trainingDays: number;
+  dates: string;
+}
+
 export interface Serie {
   id: string;
   reps: number;

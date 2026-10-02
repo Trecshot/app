@@ -1,5 +1,5 @@
 import * as SQLite from 'expo-sqlite';
-import type { Cardio, CardioLog, Ejercicio, ExerciseLog, SesionEntrenamiento, Workout, WorkoutDetails } from './types';
+import type { Cardio, CardioLog, Ejercicio, ExerciseLog, SesionEntrenamiento, WeeklySummary, Workout, WorkoutDetails } from './types';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -265,6 +265,33 @@ export async function getWorkoutsHistory(): Promise<(Workout & { id: number })[]
     }));
   } catch (error) {
     console.error('Error al obtener el historial:', error);
+    return [];
+  }
+}
+
+export async function getWeeklySummary(): Promise<WeeklySummary[]> {
+  try {
+    const db = await getDatabase();
+    return await db.getAllAsync<WeeklySummary>(
+      `WITH dated_workouts AS (
+         SELECT date, week_type AS weekType, cycle_week AS cycleWeek,
+                date(date, '-' || ((CAST(strftime('%w', date) AS INTEGER) + 6) % 7) || ' days') AS weekStart
+         FROM workouts
+       ), daily_workouts AS (
+         SELECT DISTINCT date, weekType, cycleWeek, weekStart
+         FROM dated_workouts
+       )
+       SELECT CAST(strftime('%Y', date(weekStart, '+3 days')) AS INTEGER) AS weekYear,
+              cycleWeek,
+              weekType,
+              COUNT(*) AS trainingDays,
+              GROUP_CONCAT(date, ', ') AS dates
+       FROM daily_workouts
+       GROUP BY weekStart, cycleWeek, weekType
+       ORDER BY weekStart DESC, weekType ASC;`,
+    );
+  } catch (error) {
+    console.error('Error al obtener el resumen semanal:', error);
     return [];
   }
 }

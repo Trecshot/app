@@ -2,8 +2,8 @@ import { StatusBar } from 'expo-status-bar';
 import { Activity, AlarmClock, Bike, CirclePlus, Dumbbell, History, Minus, Pause, Play, RotateCcw, Save, Trash2, TrendingDown, TrendingUp, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { eliminarSesion, getIsoWeekNumber, getWorkoutDetails, guardarSesion, initDatabase, obtenerSesiones } from './database';
-import { Cardio, Ejercicio, SesionEntrenamiento, Serie, WorkoutDetails } from './types';
+import { eliminarSesion, getIsoWeekNumber, getWeeklySummary, getWorkoutDetails, guardarSesion, initDatabase, obtenerSesiones } from './database';
+import { Cardio, Ejercicio, SesionEntrenamiento, Serie, WeeklySummary, WorkoutDetails } from './types';
 
 type Tab = 'entrenar' | 'historial';
 const modes: Cardio['modalidad'][] = ['Trotar', 'Caminar', 'Bicicleta', 'Cuerda', 'Otro'];
@@ -36,6 +36,7 @@ export default function App() {
   const [exercises, setExercises] = useState<Ejercicio[]>([ejercicio()]);
   const [cardio, setCardio] = useState<Cardio | null>(null);
   const [history, setHistory] = useState<SesionEntrenamiento[]>([]);
+  const [weeklySummary, setWeeklySummary] = useState<WeeklySummary[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null);
@@ -55,6 +56,7 @@ export default function App() {
       await initDatabase();
       const sessions = await obtenerSesiones();
       setHistory(sessions);
+      setWeeklySummary(await getWeeklySummary());
     }
     catch { Alert.alert('No se pudo abrir el historial', 'La base de datos local no respondió.'); }
     finally { setLoading(false); }
@@ -116,6 +118,7 @@ export default function App() {
     try {
       await guardarSesion(workout);
       setHistory((items) => [workout, ...items].sort((a, b) => b.fecha.localeCompare(a.fecha)));
+      setWeeklySummary(await getWeeklySummary());
       setRunning(false);
       setSessionActive(false);
       setSeconds(0);
@@ -129,7 +132,11 @@ export default function App() {
     finally { setLoading(false); }
   }
   async function deleteWorkout(workoutId: string) {
-    try { await eliminarSesion(workoutId); setHistory((items) => items.filter((item) => item.id !== workoutId)); }
+    try {
+      await eliminarSesion(workoutId);
+      setHistory((items) => items.filter((item) => item.id !== workoutId));
+      setWeeklySummary(await getWeeklySummary());
+    }
     catch { Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo.'); }
   }
   function confirmDeleteWorkout(workoutId: string) {
@@ -161,7 +168,7 @@ export default function App() {
       <Pressable style={styles.outline} onPress={() => setExercises((items) => [...items, ejercicio()])}><CirclePlus color={c.ink} size={18} /><Text style={styles.outlineText}>Añadir ejercicio</Text></Pressable>
       <View style={styles.cardio}><View style={styles.cardioHead}><View style={styles.live}><Bike color={c.orange} size={20} /><Text style={styles.cardioTitle}>Cardio</Text></View><Switch value={cardio !== null} onValueChange={(enabled) => setCardio(enabled ? { realizado: true, modalidad: 'Trotar', tiempoMin: 20 } : null)} trackColor={{ false: '#d5ddd6', true: c.orange }} thumbColor={c.white} /></View>{cardio && <View style={styles.cardioBody}><Text style={styles.label}>MODALIDAD</Text><View style={styles.chips}>{modes.map((mode) => <Pressable key={mode} style={[styles.chip, cardio.modalidad === mode && styles.chipActive]} onPress={() => setCardio({ ...cardio, modalidad: mode })}><Text style={styles.chipText}>{mode}</Text></Pressable>)}</View><View style={styles.row}><View style={styles.field}><Text style={styles.label}>MINUTOS</Text><TextInput value={String(cardio.tiempoMin)} onChangeText={(value) => setCardio({ ...cardio, tiempoMin: normalizarNumero(value) })} keyboardType="numeric" style={styles.input} /></View><View style={styles.field}><Text style={styles.label}>DISTANCIA KM</Text><TextInput value={String(cardio.distanciaKm ?? 0)} onChangeText={(value) => setCardio({ ...cardio, distanciaKm: normalizarNumero(value) })} keyboardType="decimal-pad" style={styles.input} /></View></View></View>}</View>
       <Pressable accessibilityRole="button" style={[styles.save, styles.finish, (!sessionActive || loading) && styles.disabled]} disabled={!sessionActive || loading} onPress={finishWorkout}><Save color={c.white} size={19} /><Text style={[styles.saveText, styles.finishText]}>{loading ? 'Guardando...' : 'Finalizar entrenamiento'}</Text></Pressable>
-    </ScrollView> : <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}><View style={styles.historyIntro}><Text style={styles.count}>{history.length}</Text><View><Text style={styles.historyLabel}>SESIONES REGISTRADAS</Text><Text style={styles.historySub}>Cada entrenamiento cuenta.</Text></View></View>{loading ? <Text style={styles.emptyText}>Cargando historial...</Text> : history.length === 0 ? <View style={styles.empty}><History color={c.muted} size={32} /><Text style={styles.emptyTitle}>Aún no hay sesiones</Text><Text style={styles.emptyText}>Guarda tu primer entrenamiento para verlo aquí.</Text></View> : history.map((workout) => <WorkoutHistoryCard
+    </ScrollView> : <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}><View style={styles.historyIntro}><Text style={styles.count}>{history.length}</Text><View><Text style={styles.historyLabel}>SESIONES REGISTRADAS</Text><Text style={styles.historySub}>Cada entrenamiento cuenta.</Text></View></View>{weeklySummary.length > 0 && <View style={weeklyStyles.section}><Text style={styles.headingText}>Rendimiento semanal</Text><Text style={styles.hint}>Días entrenados por semana ISO</Text>{weeklySummary.map((summary) => <View style={weeklyStyles.card} key={`${summary.weekYear}-${summary.cycleWeek}-${summary.weekType}`}><Text style={weeklyStyles.title}>Semana {summary.cycleWeek}, {summary.weekYear} · {summary.weekType === 'carga' ? 'CARGA' : 'DESCARGA'}</Text><Text style={weeklyStyles.days}>Días entrenados: {summary.trainingDays} / 7</Text><Text style={weeklyStyles.dates}>Fechas: {summary.dates}</Text></View>)}</View>}{loading ? <Text style={styles.emptyText}>Cargando historial...</Text> : history.length === 0 ? <View style={styles.empty}><History color={c.muted} size={32} /><Text style={styles.emptyTitle}>Aún no hay sesiones</Text><Text style={styles.emptyText}>Guarda tu primer entrenamiento para verlo aquí.</Text></View> : history.map((workout) => <WorkoutHistoryCard
   key={workout.id}
   workout={workout}
   expanded={expandedWorkoutId === workout.id}
@@ -202,7 +209,7 @@ function WorkoutHistoryCard({
       >
         <Text style={styles.date}>{workout.fecha}</Text>
         <Text style={styles.meta}>
-          {workout.tipoSemana === 'carga' ? 'Semana de carga' : 'Semana de descarga'} · {Math.floor(workout.duracionSegundos / 66)} min
+          {workout.tipoSemana === 'carga' ? 'Semana de carga' : 'Semana de descarga'} · {Math.floor(workout.duracionSegundos / 60)} min
         </Text>
         <Text style={styles.meta}>Semana del año: {workout.cycleWeek ?? 1}</Text>
         {workout.notas ? <Text style={styles.meta}>Notas: {workout.notas}</Text> : null}
@@ -256,4 +263,12 @@ const detailStyles = StyleSheet.create({
 const sessionInfoStyles = StyleSheet.create({
   card: { backgroundColor: c.white, borderColor: c.line, borderWidth: 1, borderRadius: 16, padding: 14, gap: 8 },
   notes: { minHeight: 88, paddingTop: 10 },
+});
+
+const weeklyStyles = StyleSheet.create({
+  section: { gap: 10 },
+  card: { backgroundColor: c.white, borderRadius: 16, borderWidth: 1, borderColor: c.line, padding: 15, gap: 7 },
+  title: { color: c.ink, fontSize: 14, fontWeight: '900' },
+  days: { color: c.green, fontSize: 13, fontWeight: '800' },
+  dates: { color: c.muted, fontSize: 12, lineHeight: 18 },
 });

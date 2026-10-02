@@ -83,7 +83,7 @@ Si cambiaste otros archivos, agrégalos también con `git add` antes de crear el
 
 ## 7. Cómo se guardan los entrenamientos
 
-La base local `gym_tracker.db` se inicializa automáticamente al abrir la aplicación. Guarda las sesiones en tablas relacionadas de entrenamientos, ejercicios/series y cardio; no hace falta crear las tablas manualmente. En el formulario puedes cambiar la fecha (formato `AAAA-MM-DD`), agregar notas opcionales y especificar un grupo muscular para cada ejercicio. La semana ISO del año se calcula automáticamente a partir de la fecha y aparece en el historial; ya no hay un contador manual de semana del ciclo.
+La base local `gym_tracker.db` se inicializa automáticamente al abrir la aplicación. Guarda las sesiones en tablas relacionadas de entrenamientos, ejercicios/series y cardio; no hace falta crear las tablas manualmente. En el formulario puedes cambiar la fecha (formato `AAAA-MM-DD`), agregar notas opcionales y especificar un grupo muscular para cada ejercicio. La semana ISO del año se calcula automáticamente a partir de la fecha y aparece en el historial; ya no hay un contador manual de semana del ciclo. El historial incluye un resumen por semana ISO y tipo de estímulo con los días distintos entrenados y las fechas registradas.
 
 Para registrar una sesión, pulsa **Comenzar**. Puedes pausarla y reanudarla con el mismo control; **Finalizar entrenamiento** detiene el cronómetro, guarda ejercicios, series y cardio, y limpia el formulario para la siguiente sesión. El botón para finalizar se activa después de comenzar la sesión.
 
