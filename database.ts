@@ -284,6 +284,8 @@ export async function getWeeklySummary(): Promise<WeeklySummary[]> {
        SELECT CAST(strftime('%Y', date(weekStart, '+3 days')) AS INTEGER) AS weekYear,
               cycleWeek,
               weekType,
+        weekStart,
+        date(weekStart, '+6 days') AS weekEnd,
               COUNT(*) AS trainingDays,
               GROUP_CONCAT(date, ', ') AS dates
        FROM daily_workouts

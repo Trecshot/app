@@ -41,6 +41,8 @@ export interface WeeklySummary {
   weekYear: number;
   cycleWeek: number;
   weekType: WeekType;
+  weekStart: string;
+  weekEnd: string;
   trainingDays: number;
   dates: string;
 }
