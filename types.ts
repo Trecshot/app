@@ -1,3 +1,32 @@
+export type WeekType = 'carga' | 'descarga';
+
+export interface Workout {
+  id?: number;
+  date: string;
+  weekType: WeekType;
+  notes?: string;
+  durationSeconds?: number;
+}
+
+export interface ExerciseLog {
+  id?: number;
+  workoutId: number;
+  exerciseName: string;
+  muscleGroup: string;
+  setNumber: number;
+  reps: number;
+  weight: number;
+}
+
+export interface CardioLog {
+  id?: number;
+  workoutId: number;
+  cardioType: string;
+  level?: number;
+  distanceKm?: number;
+  durationMinutes: number;
+}
+
 export interface Serie {
   id: string;
   reps: number;
