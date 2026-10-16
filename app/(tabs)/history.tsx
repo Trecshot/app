@@ -1,15 +1,17 @@
-import { Activity, Dumbbell, History as HistoryIcon, Trash2 } from 'lucide-react-native';
-import { useState } from 'react';
+import { Dumbbell, History as HistoryIcon } from 'lucide-react-native';
+import { useCallback, useState } from 'react';
 import {
   Alert,
-  Pressable,
+  FlatList,
+  type ListRenderItemInfo,
+  Platform,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { getWorkoutDetails } from '../../database';
+import { WorkoutHistoryCard } from '../../src/components/WorkoutHistoryCard';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { c } from '../../src/theme';
 import type { SesionEntrenamiento, WorkoutDetails } from '../../types';
@@ -26,44 +28,62 @@ export default function HistoryScreen() {
   const [details, setDetails] = useState<{ workoutId: string; data: WorkoutDetails } | null>(null);
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
 
-  async function toggleWorkoutDetails(workoutId: string) {
-    if (expandedWorkoutId === workoutId) {
-      setExpandedWorkoutId(null);
+  const toggleWorkoutDetails = useCallback(
+    async (workoutId: string) => {
+      if (expandedWorkoutId === workoutId) {
+        setExpandedWorkoutId(null);
+        setDetails(null);
+        setDetailsLoadingId(null);
+        return;
+      }
+      setExpandedWorkoutId(workoutId);
       setDetails(null);
-      setDetailsLoadingId(null);
-      return;
-    }
-    setExpandedWorkoutId(workoutId);
-    setDetails(null);
-    setDetailsLoadingId(workoutId);
-    try {
-      const workoutDetails = await getWorkoutDetails(workoutId);
-      setDetails({ workoutId, data: workoutDetails });
-    } finally {
-      setDetailsLoadingId((current) => (current === workoutId ? null : current));
-    }
-  }
+      setDetailsLoadingId(workoutId);
+      try {
+        const workoutDetails = await getWorkoutDetails(workoutId);
+        setDetails({ workoutId, data: workoutDetails });
+      } finally {
+        setDetailsLoadingId((current) => (current === workoutId ? null : current));
+      }
+    },
+    [expandedWorkoutId],
+  );
 
-  function confirmDeleteWorkout(workoutId: string) {
-    Alert.alert('Eliminar sesión', '¿Deseas eliminar este registro?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Eliminar', style: 'destructive', onPress: () => { void deleteWorkout(workoutId); } },
-    ]);
-  }
+  const confirmDeleteWorkout = useCallback(
+    (workoutId: string) => {
+      Alert.alert('Eliminar sesión', '¿Deseas eliminar este registro?', [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            void deleteWorkout(workoutId);
+          },
+        },
+      ]);
+    },
+    [deleteWorkout],
+  );
 
-  return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.kicker}>MI ENTRENAMIENTO</Text>
-          <Text style={styles.title}>Tu constancia.</Text>
-        </View>
-        <View style={styles.logo}>
-          <Dumbbell color={c.ink} size={22} />
-        </View>
-      </View>
+  const renderWorkoutItem = useCallback(
+    ({ item }: ListRenderItemInfo<SesionEntrenamiento>) => (
+      <WorkoutHistoryCard
+        workout={item}
+        expanded={expandedWorkoutId === item.id}
+        details={details?.workoutId === item.id ? details.data : null}
+        loadingDetails={detailsLoadingId === item.id}
+        onToggle={toggleWorkoutDetails}
+        onDelete={confirmDeleteWorkout}
+      />
+    ),
+    [expandedWorkoutId, details, detailsLoadingId, toggleWorkoutDetails, confirmDeleteWorkout],
+  );
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+  const keyExtractor = useCallback((item: SesionEntrenamiento) => item.id, []);
+
+  const ListHeader = useCallback(
+    () => (
+      <View style={styles.headerSection}>
         <View style={styles.historyIntro}>
           <Text style={styles.count}>{history.length}</Text>
           <View>
@@ -91,111 +111,55 @@ export default function HistoryScreen() {
           </View>
         )}
 
-        {loading ? (
-          <Text style={styles.emptyText}>Cargando historial...</Text>
-        ) : history.length === 0 ? (
-          <View style={styles.empty}>
-            <HistoryIcon color={c.muted} size={32} />
-            <Text style={styles.emptyTitle}>Aún no hay sesiones</Text>
-            <Text style={styles.emptyText}>Guarda tu primer entrenamiento para verlo aquí.</Text>
+        {history.length > 0 && (
+          <View style={styles.listHeading}>
+            <Text style={styles.headingText}>Entrenamientos pasados</Text>
           </View>
-        ) : (
-          history.map((workout) => (
-            <WorkoutHistoryCard
-              key={workout.id}
-              workout={workout}
-              expanded={expandedWorkoutId === workout.id}
-              details={details?.workoutId === workout.id ? details.data : null}
-              loadingDetails={detailsLoadingId === workout.id}
-              onToggle={() => {
-                void toggleWorkoutDetails(workout.id);
-              }}
-              onDelete={() => confirmDeleteWorkout(workout.id)}
-            />
-          ))
         )}
-      </ScrollView>
-    </SafeAreaView>
-  );
-}
-
-interface WorkoutHistoryCardProps {
-  workout: SesionEntrenamiento;
-  expanded: boolean;
-  details: WorkoutDetails | null;
-  loadingDetails: boolean;
-  onToggle: () => void;
-  onDelete: () => void;
-}
-
-function WorkoutHistoryCard({
-  workout,
-  expanded,
-  details,
-  loadingDetails,
-  onToggle,
-  onDelete,
-}: WorkoutHistoryCardProps) {
-  return (
-    <View style={styles.historyCard}>
-      <View style={[styles.rowBetween, detailStyles.header]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          style={detailStyles.toggle}
-          onPress={onToggle}
-        >
-          <Text style={styles.date}>{workout.fecha}</Text>
-          <Text style={styles.meta}>
-            {workout.tipoSemana === 'carga' ? 'Semana de carga' : 'Semana de descarga'} · {Math.floor(workout.duracionSegundos / 60)} min
-          </Text>
-          <Text style={styles.meta}>Semana del año: {workout.cycleWeek ?? 1}</Text>
-          {workout.notas ? <Text style={styles.meta}>Notas: {workout.notas}</Text> : null}
-          <Text style={detailStyles.toggleLabel}>{expanded ? 'Ocultar detalles' : 'Ver ejercicios y cardio'}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Eliminar sesión" onPress={onDelete}>
-          <Trash2 color={c.red} size={18} />
-        </Pressable>
       </View>
-      {expanded && (
-        <View style={detailStyles.body}>
-          {loadingDetails ? (
-            <Text style={styles.emptyText}>Cargando detalles...</Text>
-          ) : !details || (details.exercises.length === 0 && details.cardio.length === 0) ? (
-            <Text style={styles.emptyText}>Esta sesión no tiene ejercicios ni cardio registrados.</Text>
-          ) : (
-            <>
-              {details.exercises.map((set, index) => (
-                <View style={detailStyles.entry} key={`${set.exerciseId ?? set.exerciseName}-${set.setNumber}-${index}`}>
-                  <View style={styles.live}>
-                    <Dumbbell color={c.green} size={14} />
-                    <Text style={detailStyles.exerciseName}>
-                      {set.exerciseName} · {set.muscleGroup}
-                    </Text>
-                  </View>
-                  <Text style={detailStyles.detailText}>
-                    Serie {set.setNumber} · {set.reps} reps · {set.weight} kg
-                  </Text>
-                </View>
-              ))}
-              {details.cardio.map((cardio, index) => (
-                <View style={detailStyles.entry} key={`${cardio.cardioType}-${index}`}>
-                  <View style={styles.live}>
-                    <Activity color={c.orange} size={14} />
-                    <Text style={detailStyles.exerciseName}>Cardio · {cardio.cardioType}</Text>
-                  </View>
-                  <Text style={detailStyles.detailText}>
-                    {cardio.durationMinutes} min
-                    {cardio.distanceKm !== undefined ? ` · ${cardio.distanceKm} km` : ''}
-                    {cardio.level !== undefined ? ` · Nivel ${cardio.level}` : ''}
-                  </Text>
-                </View>
-              ))}
-            </>
-          )}
+    ),
+    [history.length, weeklySummary],
+  );
+
+  const ListEmpty = useCallback(() => {
+    if (loading) {
+      return <Text style={styles.emptyText}>Cargando historial...</Text>;
+    }
+    return (
+      <View style={styles.empty}>
+        <HistoryIcon color={c.muted} size={32} />
+        <Text style={styles.emptyTitle}>Aún no hay sesiones</Text>
+        <Text style={styles.emptyText}>Guarda tu primer entrenamiento para verlo aquí.</Text>
+      </View>
+    );
+  }, [loading]);
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.kicker}>MI ENTRENAMIENTO</Text>
+          <Text style={styles.title}>Tu constancia.</Text>
         </View>
-      )}
-    </View>
+        <View style={styles.logo}>
+          <Dumbbell color={c.ink} size={22} />
+        </View>
+      </View>
+
+      <FlatList
+        data={history as SesionEntrenamiento[]}
+        renderItem={renderWorkoutItem}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={ListHeader}
+        ListEmptyComponent={ListEmpty}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -212,31 +176,18 @@ const styles = StyleSheet.create({
   kicker: { color: c.green, fontSize: 11, fontWeight: '800', letterSpacing: 1.8 },
   title: { color: c.ink, fontSize: 25, fontWeight: '800', marginTop: 5 },
   logo: { width: 44, height: 44, backgroundColor: c.lime, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 18, paddingBottom: 40, gap: 18 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  live: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  content: { padding: 18, paddingBottom: 40 },
+  headerSection: { gap: 18, marginBottom: 18 },
   headingText: { color: c.ink, fontSize: 19, fontWeight: '800' },
   hint: { color: c.muted, fontSize: 12 },
+  listHeading: { marginTop: 4 },
   historyIntro: { backgroundColor: c.ink, borderRadius: 20, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 },
   count: { color: c.lime, fontSize: 44, fontWeight: '900' },
   historyLabel: { color: c.white, fontWeight: '800', fontSize: 12, letterSpacing: 0.8 },
   historySub: { color: '#aab6ad', marginTop: 4, fontSize: 12 },
-  historyCard: { backgroundColor: c.white, borderWidth: 1, borderColor: c.line, borderRadius: 17, padding: 16 },
-  date: { color: c.ink, fontSize: 16, fontWeight: '800' },
-  meta: { color: c.muted, fontSize: 12, marginTop: 4 },
   empty: { alignItems: 'center', paddingVertical: 45, gap: 10 },
   emptyTitle: { color: c.ink, fontSize: 18, fontWeight: '800' },
   emptyText: { color: c.muted, textAlign: 'center', fontSize: 13 },
-});
-
-const detailStyles = StyleSheet.create({
-  header: { gap: 12, alignItems: 'flex-start' },
-  toggle: { flex: 1, gap: 4 },
-  toggleLabel: { color: c.green, fontSize: 12, fontWeight: '800', marginTop: 3 },
-  body: { borderTopWidth: 1, borderTopColor: c.line, marginTop: 14, paddingTop: 12, gap: 12 },
-  entry: { gap: 4 },
-  exerciseName: { color: c.ink, fontSize: 13, fontWeight: '700' },
-  detailText: { color: c.muted, fontSize: 12, marginLeft: 22 },
 });
 
 const weeklyStyles = StyleSheet.create({
