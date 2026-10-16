@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { getIsoWeekNumber, guardarSesion } from '../../database';
+import { getIsoWeekNumber } from '../../database';
 import { SessionTimerBanner, type SessionTimerHandle } from '../../src/components/SessionTimerBanner';
 import {
   createEmptyExercise,
@@ -21,7 +21,7 @@ import {
   useWorkoutSession,
 } from '../../src/hooks/useWorkoutSession';
 import { c } from '../../src/theme';
-import type { Cardio, SesionEntrenamiento } from '../../types';
+import type { Cardio } from '../../types';
 
 const modes: Cardio['modalidad'][] = ['Trotar', 'Caminar', 'Bicicleta', 'Cuerda', 'Otro'];
 const normalizarNumero = (txt: string) => parseFloat(txt.replace(',', '.')) || 0;
@@ -43,14 +43,14 @@ export default function WorkoutScreen() {
   const [sessionActive, setSessionActive] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const { state, dispatch, resetSession } = useWorkoutSession();
+  const { state, dispatch, finishWorkout } = useWorkoutSession();
   const { week, sessionDate, notes, exercises, cardio } = state;
 
   const handleSessionActiveChange = useCallback((active: boolean) => {
     setSessionActive(active);
   }, []);
 
-  async function finishWorkout() {
+  async function handleFinishWorkout() {
     if (!sessionActive) {
       Alert.alert(
         'Sesión no iniciada',
@@ -58,45 +58,14 @@ export default function WorkoutScreen() {
       );
       return;
     }
-    if (!esFechaValida(sessionDate)) {
-      Alert.alert('Fecha no válida', 'Escribe la fecha con el formato AAAA-MM-DD.');
-      return;
-    }
-    const validExercises = exercises.filter((item) => item.nombre.trim());
-    if (!validExercises.length) {
-      Alert.alert(
-        'Agrega un ejercicio',
-        'Escribe al menos un nombre antes de guardar.',
-      );
-      return;
-    }
 
     setLoading(true);
     const duracionSegundos = timerRef.current?.getElapsedSeconds() ?? 0;
-    const workout: SesionEntrenamiento = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      fecha: sessionDate,
-      ...(notes.trim() ? { notas: notes.trim() } : {}),
-      duracionSegundos,
-      tipoSemana: week,
-      cycleWeek: getIsoWeekNumber(sessionDate),
-      ejercicios: validExercises,
-      cardio,
-    };
-
-    try {
-      await guardarSesion(workout);
+    const success = await finishWorkout(duracionSegundos);
+    if (success) {
       await timerRef.current?.reset();
-      resetSession();
-      Alert.alert(
-        '¡Entrenamiento finalizado!',
-        'La sesión se guardó correctamente.',
-      );
-    } catch {
-      Alert.alert('No se pudo guardar', 'Comprueba la base de datos local.');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }
 
   return (
@@ -352,7 +321,7 @@ export default function WorkoutScreen() {
             style={[styles.save, styles.finish, (!sessionActive || loading) && styles.disabled]}
             disabled={!sessionActive || loading}
             onPress={() => {
-              void finishWorkout();
+              void handleFinishWorkout();
             }}
           >
             <Save color={c.white} size={19} />

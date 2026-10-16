@@ -1,8 +1,9 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react';
-import { AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import { workoutReducer, type WorkoutState } from './useWorkoutReducer';
 import { loadDraft, saveDraft, clearDraft } from '../storage/workoutDraft';
-import type { Ejercicio, Serie } from '../../types';
+import { getIsoWeekNumber, guardarSesion } from '../../database';
+import type { Ejercicio, Serie, SesionEntrenamiento } from '../../types';
 
 // Utilidades estáticas
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -12,6 +13,18 @@ export const createEmptyExercise = (): Ejercicio => ({ id: generateId(), nombre:
 export const getLocalTodayDate = () => {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
+
+export const esFechaValida = (value: string): boolean => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
 };
 
 export const INITIAL_STATE: WorkoutState = {
@@ -70,10 +83,48 @@ export function useWorkoutSession() {
     void clearDraft();
   }, []);
 
+  const finishWorkout = useCallback(
+    async (timerElapsedSeconds: number): Promise<boolean> => {
+      if (!esFechaValida(state.sessionDate)) {
+        Alert.alert('Fecha no válida', 'Escribe la fecha con el formato AAAA-MM-DD.');
+        return false;
+      }
+      const validExercises = state.exercises.filter((item) => item.nombre.trim());
+      if (!validExercises.length) {
+        Alert.alert('Agrega un ejercicio', 'Escribe al menos un nombre antes de guardar.');
+        return false;
+      }
+
+      const workout: SesionEntrenamiento = {
+        id: generateId(),
+        fecha: state.sessionDate,
+        ...(state.notes.trim() ? { notas: state.notes.trim() } : {}),
+        duracionSegundos: timerElapsedSeconds,
+        tipoSemana: state.week,
+        cycleWeek: getIsoWeekNumber(state.sessionDate),
+        ejercicios: validExercises,
+        cardio: state.cardio,
+      };
+
+      try {
+        await guardarSesion(workout);
+        resetSession();
+        Alert.alert('¡Entrenamiento finalizado!', 'La sesión se guardó correctamente.');
+        return true;
+      } catch (error) {
+        console.error('Error al guardar la sesión:', error);
+        Alert.alert('No se pudo guardar', 'Comprueba la base de datos local.');
+        return false;
+      }
+    },
+    [state, resetSession],
+  );
+
   return {
     state,
     dispatch,
     isDraftHydrated,
     resetSession,
+    finishWorkout,
   };
 }
