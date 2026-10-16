@@ -82,42 +82,46 @@ export default function HistoryScreen() {
   const keyExtractor = useCallback((item: SesionEntrenamiento) => item.id, []);
 
   const ListHeader = useCallback(
-    () => (
-      <View style={styles.headerSection}>
-        <View style={styles.historyIntro}>
-          <Text style={styles.count}>{history.length}</Text>
-          <View>
-            <Text style={styles.historyLabel}>SESIONES REGISTRADAS</Text>
-            <Text style={styles.historySub}>Cada entrenamiento cuenta.</Text>
+    () => {
+      const labelSesiones = history.length === 1 ? 'SESIÓN REGISTRADA' : 'SESIONES REGISTRADAS';
+
+      return (
+        <View style={styles.headerSection}>
+          <View style={styles.historyIntro}>
+            <Text style={styles.count}>{history.length}</Text>
+            <View>
+              <Text style={styles.historyLabel}>{labelSesiones}</Text>
+              <Text style={styles.historySub}>Cada entrenamiento cuenta.</Text>
+            </View>
           </View>
+
+          {weeklySummary.length > 0 && (
+            <View style={weeklyStyles.section}>
+              <Text style={styles.headingText}>Rendimiento semanal</Text>
+              <Text style={styles.hint}>Días entrenados por semana ISO</Text>
+              {weeklySummary.map((summary) => (
+                <View style={weeklyStyles.card} key={`${summary.weekYear}-${summary.cycleWeek}-${summary.weekType}`}>
+                  <Text style={weeklyStyles.title}>
+                    Semana {summary.cycleWeek}, {summary.weekYear} · {summary.weekType === 'carga' ? 'CARGA' : 'DESCARGA'}
+                  </Text>
+                  <Text style={weeklyStyles.range}>
+                    Rango: {formatoFechaCorta(summary.weekStart)} al {formatoFechaCorta(summary.weekEnd)}
+                  </Text>
+                  <Text style={weeklyStyles.days}>Días entrenados: {summary.trainingDays} / 7</Text>
+                  <Text style={weeklyStyles.dates}>Fechas: {summary.dates}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {history.length > 0 && (
+            <View style={styles.listHeading}>
+              <Text style={styles.headingText}>Entrenamientos pasados</Text>
+            </View>
+          )}
         </View>
-
-        {weeklySummary.length > 0 && (
-          <View style={weeklyStyles.section}>
-            <Text style={styles.headingText}>Rendimiento semanal</Text>
-            <Text style={styles.hint}>Días entrenados por semana ISO</Text>
-            {weeklySummary.map((summary) => (
-              <View style={weeklyStyles.card} key={`${summary.weekYear}-${summary.cycleWeek}-${summary.weekType}`}>
-                <Text style={weeklyStyles.title}>
-                  Semana {summary.cycleWeek}, {summary.weekYear} · {summary.weekType === 'carga' ? 'CARGA' : 'DESCARGA'}
-                </Text>
-                <Text style={weeklyStyles.range}>
-                  Rango: {formatoFechaCorta(summary.weekStart)} al {formatoFechaCorta(summary.weekEnd)}
-                </Text>
-                <Text style={weeklyStyles.days}>Días entrenados: {summary.trainingDays} / 7</Text>
-                <Text style={weeklyStyles.dates}>Fechas: {summary.dates}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {history.length > 0 && (
-          <View style={styles.listHeading}>
-            <Text style={styles.headingText}>Entrenamientos pasados</Text>
-          </View>
-        )}
-      </View>
-    ),
+      );
+    },
     [history.length, weeklySummary],
   );
 
@@ -164,7 +168,7 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: c.paper },
+  safe: { flex: 1, backgroundColor: '#F3F4F6' },
   header: {
     paddingHorizontal: 22,
     paddingTop: 18,
@@ -181,7 +185,19 @@ const styles = StyleSheet.create({
   headingText: { color: c.ink, fontSize: 19, fontWeight: '800' },
   hint: { color: c.muted, fontSize: 12 },
   listHeading: { marginTop: 4 },
-  historyIntro: { backgroundColor: c.ink, borderRadius: 20, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 16 },
+  historyIntro: {
+    backgroundColor: c.ink,
+    borderRadius: 20,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
   count: { color: c.lime, fontSize: 44, fontWeight: '900' },
   historyLabel: { color: c.white, fontWeight: '800', fontSize: 12, letterSpacing: 0.8 },
   historySub: { color: '#aab6ad', marginTop: 4, fontSize: 12 },
@@ -192,7 +208,19 @@ const styles = StyleSheet.create({
 
 const weeklyStyles = StyleSheet.create({
   section: { gap: 10 },
-  card: { backgroundColor: c.white, borderRadius: 16, borderWidth: 1, borderColor: c.line, padding: 15, gap: 7 },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: c.line,
+    padding: 15,
+    gap: 7,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
   title: { color: c.ink, fontSize: 14, fontWeight: '900' },
   range: { color: c.muted, fontSize: 12, fontWeight: '700' },
   days: { color: c.green, fontSize: 13, fontWeight: '800' },

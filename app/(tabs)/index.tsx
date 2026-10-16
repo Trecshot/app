@@ -69,7 +69,11 @@ export default function WorkoutScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      style={{ flex: 1 }}
+    >
       <SafeAreaView style={styles.safe}>
         <View style={styles.header}>
           <View>
@@ -168,58 +172,72 @@ export default function WorkoutScreen() {
                 style={styles.input}
                 accessibilityLabel={`Grupo muscular del ejercicio ${index + 1}`}
               />
-              <View style={styles.tableHead}>
-                <Text style={styles.tableLabel}>SERIE</Text>
-                <Text style={styles.tableLabel}>REPS</Text>
-                <Text style={styles.tableLabel}>PESO (KG)</Text>
-                <View style={styles.endSpace} />
+              <View style={styles.gridHeaderContainer}>
+                <View style={styles.column}>
+                  <Text style={styles.tableLabel}>SERIE</Text>
+                </View>
+                <View style={styles.column}>
+                  <Text style={styles.tableLabel}>REPS</Text>
+                </View>
+                <View style={styles.column}>
+                  <Text style={styles.tableLabel}>PESO (KG)</Text>
+                </View>
+                <View style={styles.actionColumn} />
               </View>
               {item.series.map((set, setIndex) => (
-                <View style={styles.setRow} key={set.id}>
-                  <Text style={styles.setNumber}>{setIndex + 1}</Text>
-                  <TextInput
-                    value={String(set.reps)}
-                    onChangeText={(value) =>
-                      dispatch({
-                        type: 'UPDATE_SET',
-                        payload: {
-                          exerciseId: item.id,
-                          setId: set.id,
-                          field: 'reps',
-                          value: normalizarNumero(value),
-                        },
-                      })
-                    }
-                    keyboardType="numeric"
-                    style={styles.numberInput}
-                  />
-                  <TextInput
-                    value={String(set.pesoKg)}
-                    onChangeText={(value) =>
-                      dispatch({
-                        type: 'UPDATE_SET',
-                        payload: {
-                          exerciseId: item.id,
-                          setId: set.id,
-                          field: 'pesoKg',
-                          value: normalizarNumero(value),
-                        },
-                      })
-                    }
-                    keyboardType="decimal-pad"
-                    style={styles.numberInput}
-                  />
-                  <Pressable
-                    accessibilityLabel="Eliminar serie"
-                    onPress={() =>
-                      dispatch({
-                        type: 'REMOVE_SET',
-                        payload: { exerciseId: item.id, setId: set.id },
-                      })
-                    }
-                  >
-                    <Minus color={c.muted} size={17} />
-                  </Pressable>
+                <View style={styles.rowContainer} key={set.id}>
+                  <View style={styles.column}>
+                    <Text style={styles.setNumber}>{setIndex + 1}</Text>
+                  </View>
+                  <View style={styles.column}>
+                    <TextInput
+                      value={String(set.reps)}
+                      onChangeText={(value) =>
+                        dispatch({
+                          type: 'UPDATE_SET',
+                          payload: {
+                            exerciseId: item.id,
+                            setId: set.id,
+                            field: 'reps',
+                            value: normalizarNumero(value),
+                          },
+                        })
+                      }
+                      keyboardType="numeric"
+                      style={styles.inputCardioPeso}
+                    />
+                  </View>
+                  <View style={styles.column}>
+                    <TextInput
+                      value={String(set.pesoKg)}
+                      onChangeText={(value) =>
+                        dispatch({
+                          type: 'UPDATE_SET',
+                          payload: {
+                            exerciseId: item.id,
+                            setId: set.id,
+                            field: 'pesoKg',
+                            value: normalizarNumero(value),
+                          },
+                        })
+                      }
+                      keyboardType="decimal-pad"
+                      style={styles.inputCardioPeso}
+                    />
+                  </View>
+                  <View style={styles.actionColumn}>
+                    <Pressable
+                      accessibilityLabel="Eliminar serie"
+                      onPress={() =>
+                        dispatch({
+                          type: 'REMOVE_SET',
+                          payload: { exerciseId: item.id, setId: set.id },
+                        })
+                      }
+                    >
+                      <Minus color={c.muted} size={17} />
+                    </Pressable>
+                  </View>
                 </View>
               ))}
               <Pressable
@@ -336,7 +354,7 @@ export default function WorkoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: c.paper },
+  safe: { flex: 1, backgroundColor: '#F3F4F6' },
   header: {
     paddingHorizontal: 22,
     paddingTop: 18,
@@ -365,35 +383,69 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    elevation: 2,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   weekLoad: { backgroundColor: c.lime, borderColor: c.lime },
   weekDeload: { backgroundColor: c.orange, borderColor: c.orange },
   weekText: { color: c.ink, fontWeight: '700' },
-  exercise: { backgroundColor: c.white, borderRadius: 18, padding: 15, borderWidth: 1, borderColor: c.line },
+  exercise: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: c.line,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
   exerciseHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 13 },
   number: { color: c.green, fontSize: 12, fontWeight: '900' },
   exerciseInput: { flex: 1, color: c.ink, fontSize: 16, fontWeight: '800', padding: 0 },
-  tableHead: {
+  gridHeaderContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: 7,
+    justifyContent: 'space-between',
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#eef2ee',
+    borderBottomColor: '#E5E7EB',
+    marginBottom: 8,
   },
-  tableLabel: { color: c.muted, fontSize: 9, fontWeight: '800', flex: 1, textAlign: 'center' },
-  endSpace: { width: 18 },
-  setRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
-  setNumber: { width: 20, color: c.muted, textAlign: 'center' },
-  numberInput: {
+  rowContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  column: {
     flex: 1,
-    backgroundColor: c.paper,
-    color: c.ink,
-    borderRadius: 9,
-    padding: 9,
-    textAlign: 'center',
-    fontWeight: '700',
+    alignItems: 'center',
   },
-  addSet: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, paddingTop: 7 },
+  actionColumn: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputCardioPeso: {
+    width: '70%',
+    height: 40,
+    textAlign: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    color: c.ink,
+    fontWeight: '700',
+    paddingVertical: 0,
+  },
+  tableLabel: { color: c.muted, fontSize: 9, fontWeight: '800', textAlign: 'center' },
+  setNumber: { color: c.muted, textAlign: 'center', fontWeight: '700' },
+  addSet: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, paddingTop: 10 },
   addSetText: { color: c.green, fontSize: 12, fontWeight: '800' },
   outline: {
     height: 48,
@@ -406,17 +458,44 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   outlineText: { color: c.ink, fontWeight: '800' },
-  cardio: { backgroundColor: c.orangeSoft, borderRadius: 18, borderWidth: 1, borderColor: '#f9d7b4', overflow: 'hidden' },
-  cardioHead: { padding: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardio: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f9d7b4',
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cardioHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF7ED',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
   cardioTitle: { color: c.ink, fontWeight: '800', fontSize: 16 },
   cardioBody: { borderTopWidth: 1, borderTopColor: '#f9d7b4', padding: 16, gap: 12 },
   label: { color: c.muted, fontSize: 9, fontWeight: '800', letterSpacing: 0.7, marginBottom: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  chip: { borderRadius: 9, backgroundColor: c.white, paddingHorizontal: 11, paddingVertical: 8 },
+  chip: { borderRadius: 9, backgroundColor: '#F3F4F6', paddingHorizontal: 11, paddingVertical: 8 },
   chipActive: { backgroundColor: c.orange },
   chipText: { color: c.muted, fontSize: 12, fontWeight: '700' },
   field: { flex: 1 },
-  input: { backgroundColor: c.white, borderRadius: 10, color: c.ink, padding: 11, fontWeight: '700' },
+  input: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    color: c.ink,
+    padding: 11,
+    fontWeight: '700',
+  },
   save: {
     height: 54,
     borderRadius: 16,
@@ -433,6 +512,19 @@ const styles = StyleSheet.create({
 });
 
 const sessionInfoStyles = StyleSheet.create({
-  card: { backgroundColor: c.white, borderColor: c.line, borderWidth: 1, borderRadius: 16, padding: 14, gap: 8 },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderColor: c.line,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    gap: 8,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
   notes: { minHeight: 88, paddingTop: 10 },
 });

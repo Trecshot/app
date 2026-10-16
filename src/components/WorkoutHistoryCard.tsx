@@ -96,12 +96,17 @@ export const WorkoutHistoryCard = memo(WorkoutHistoryCardBase);
 
 const styles = StyleSheet.create({
   historyCard: {
-    backgroundColor: c.white,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: c.line,
-    borderRadius: 17,
+    borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 16,
+    elevation: 3,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   live: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -111,7 +116,12 @@ const styles = StyleSheet.create({
 });
 
 const detailStyles = StyleSheet.create({
-  header: { gap: 12, alignItems: 'flex-start' },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
   toggle: { flex: 1, gap: 4 },
   toggleLabel: { color: c.green, fontSize: 12, fontWeight: '800', marginTop: 3 },
   body: { borderTopWidth: 1, borderTopColor: c.line, marginTop: 14, paddingTop: 12, gap: 12 },
