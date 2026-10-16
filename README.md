@@ -1,97 +1,153 @@
 # Mi Entrenamiento
 
-Aplicación móvil para registrar sesiones de ejercicio, series, pesos y cardio. Los datos se guardan localmente en una base SQLite del dispositivo.
+Aplicación móvil para registrar sesiones de ejercicio, series, pesos y cardio. Desarrollada con React Native, Expo SDK 57, Expo Router y almacenamiento local persistente en SQLite.
+
+---
 
 ## 1. Qué necesitas instalar
 
 - **Visual Studio Code**, para abrir y editar el proyecto.
-- **Node.js 22.13 o posterior**. La descarga de Node.js también instala npm, que se usará para instalar las dependencias.
-- **Expo Go** en un teléfono si quieres probar la app sin configurar un emulador.
-- Opcional: **Android Studio** para usar un emulador Android. En Windows no se puede iniciar el simulador de iOS localmente.
+- **Node.js 22.13 o posterior** (incluye `npm`). Descárgalo desde [nodejs.org](https://nodejs.org/).
+- **Git**, para el control de versiones y sincronización con GitHub ([git-scm.com](https://git-scm.com/)).
+- **Expo Go** en un teléfono móvil (Android o iOS) para probar la app sin emulador.
+- *(Opcional)*: **Android Studio** si prefieres probar en un emulador local de Android.
 
-Descarga Node.js desde [nodejs.org](https://nodejs.org/). Después de instalarlo, cierra y vuelve a abrir VS Code para que la terminal reconozca los comandos `node` y `npm`.
+> **Nota para Windows (PowerShell):** Si al ejecutar comandos obtienes un error de directiva de ejecución (`about_Execution_Policies`), ejecuta una única vez en PowerShell:
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force
+> ```
+
+---
 
 ## 2. Abrir el proyecto
 
-1. En VS Code, selecciona **Archivo > Abrir carpeta**.
-2. Abre la carpeta raíz del proyecto, donde están `package.json` y `package-lock.json`.
-3. Abre una terminal integrada con **Terminal > Nueva terminal**.
-4. Comprueba que Node.js y npm estén disponibles:
+1. En VS Code, selecciona **Archivo > Abrir carpeta** y abre la carpeta raíz del proyecto.
+2. Abre la terminal integrada con **Terminal > Nueva terminal** (`Ctrl + Mayús + ñ` o ``Ctrl + Shift + ` ``).
+3. Comprueba que Node.js y npm estén disponibles:
+   ```powershell
+   node -v
+   npm -v
+   git --version
+   ```
+   *Si la terminal dice que no reconoce los comandos tras instalar Node.js, cierra y vuelve a abrir VS Code, o refresca las variables con:*
+   ```powershell
+   $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+   ```
 
-	```powershell
-	node -v
-	npm -v
-	```
+---
 
-	Si PowerShell dice que no reconoce esos comandos, cierra y vuelve a abrir VS Code. Si el problema continúa, revisa que Node.js se haya agregado al `PATH` de Windows.
+## 3. Instalación de dependencias
 
-## 3. Descargar las dependencias
-
-Desde la terminal integrada, confirma que estás en la carpeta del proyecto y ejecuta:
+Desde la terminal integrada en la raíz del proyecto, ejecuta:
 
 ```powershell
 npm install
 ```
 
-Este paso descarga Expo, React Native, SQLite y las demás dependencias declaradas en `package.json`. Solo es necesario repetirlo si cambian las dependencias o si se elimina la carpeta `node_modules`.
+Este comando descarga Expo Router, React Native, SQLite, Lucide Icons y todas las dependencias declaradas en `package.json`.
 
-## 4. Revisar el proyecto
+---
 
-Antes de iniciar la aplicación, puedes ejecutar estas comprobaciones:
+## 4. Diagnóstico y comprobaciones de código
+
+Antes de iniciar la app o tras realizar cambios, puedes ejecutar las siguientes comprobaciones:
 
 ```powershell
-npm run lint
+# 1. Diagnóstico completo de dependencias y compatibilidad con Expo SDK 57
+npx expo-doctor
+
+# 2. Comprobación estricta de tipos de TypeScript
 npx tsc --noEmit
+
+# 3. Revisión de estilo y reglas de linteo (React 19 / ESLint)
+npm run lint
 ```
 
-La primera revisa el estilo y posibles problemas de código. La segunda comprueba los tipos de TypeScript sin generar archivos. Si VS Code sigue mostrando un error anterior después de instalar dependencias, usa **Ctrl+Shift+P**, ejecuta **TypeScript: Restart TS Server** y vuelve a revisar el archivo.
+---
 
 ## 5. Iniciar la aplicación
 
-En la terminal de VS Code ejecuta:
+Para iniciar el servidor de desarrollo de Expo:
 
 ```powershell
 npx expo start
 ```
 
-Expo mostrará un código QR y opciones para abrir la aplicación. Escanea el código con Expo Go en el teléfono; el teléfono y la computadora deben estar conectados a una red que permita comunicarse entre ellos. También puedes elegir un emulador Android si ya está instalado y configurado.
+- **En tu teléfono celular:** Abre la app **Expo Go** y escanea el código QR que se muestra en la terminal (ambos dispositivos deben estar en la misma red Wi-Fi).
+- **Modo túnel (si la red Wi-Fi bloquea conexiones directas):**
+  ```powershell
+  npx expo start --tunnel
+  ```
+- **Iniciar directamente en emulador o navegador:**
+  ```powershell
+  npm run android   # Emulador Android
+  npm run web       # Navegador web
+  ```
 
-Para iniciar directamente en una plataforma, también existen estos comandos:
+---
 
-```powershell
-npm run android
-npm run web
+## 6. Arquitectura del Proyecto
+
+El proyecto ha sido optimizado con patrones modernos de rendimiento y enrutamiento nativo:
+
+```
+├── app/
+│   ├── _layout.tsx           # Root Layout (Splash Screen y carga temprana de base de datos)
+│   └── (tabs)/
+│       ├── _layout.tsx       # Navegación inferior nativa con Expo Router Tabs
+│       ├── index.tsx         # Pantalla principal de entrenamiento (formulario y cronómetro)
+│       └── history.tsx       # Pantalla de historial optimizada con FlatList virtualizada
+├── src/
+│   ├── components/
+│   │   ├── SessionTimerBanner.tsx   # Banner desacoplado del cronómetro activo
+│   │   └── WorkoutHistoryCard.tsx   # Tarjeta de historial memoizada con React.memo
+│   ├── hooks/
+│   │   ├── useWorkoutSession.ts     # Controlador de sesión (orquestación, autoguardado y SQLite)
+│   │   ├── useWorkoutReducer.ts     # Motor central de estado con unión discriminada de acciones
+│   │   ├── useWorkoutHistory.ts     # Aislamiento de consultas asíncronas del historial
+│   │   └── useWorkoutTimer.ts       # Cronómetro persistente que sobrevive a reinicios
+│   ├── storage/
+│   │   └── workoutDraft.ts          # Persistencia del borrador en segundo plano (debounce 400ms)
+│   └── theme.ts                     # Paleta de colores y estilos globales
+├── database.ts                      # Operaciones de persistencia local en SQLite (WAL, migraciones)
+└── types.ts                         # Definición de interfaces y tipos de TypeScript
 ```
 
-## 6. Subir cambios a GitHub
+---
 
-Para publicar cambios necesitas tener Git instalado, abrir en VS Code una copia clonada del repositorio y haber iniciado sesión en GitHub. En la terminal, revisa primero qué archivos cambiaron:
+## 7. Subir cambios a GitHub
 
-```powershell
-git status
-```
+Para publicar tus cambios en tu repositorio remoto:
 
-Agrega solo los archivos que quieras publicar, crea un commit y envíalo a la rama `main`:
+1. Revisa los archivos modificados:
+   ```powershell
+   git status
+   ```
+2. Agrega los archivos modificados y crea un commit descriptivo:
+   ```powershell
+   git add .
+   git commit -m "feat: descripción de los cambios realizados"
+   ```
+3. Sube los cambios a la rama principal `main`:
+   ```powershell
+   git push -u origin main
+   ```
+   *(La primera vez, Windows te solicitará autorizar tu cuenta de GitHub a través del navegador).*
 
-```powershell
-git add App.tsx database.ts types.ts README.md
-git commit -m "agregar flujo de sesion activa"
-git push origin main
-```
+---
 
-Si cambiaste otros archivos, agrégalos también con `git add` antes de crear el commit. No agregues `node_modules`; sus dependencias se instalan en cada computadora con `npm install`.
+## 8. Cómo funciona la persistencia y la base de datos
 
-## 7. Cómo se guardan los entrenamientos
+- **Inicialización Temprana:** La base local `gym_tracker.db` se inicializa y migra antes de ocultar el Splash Screen (`app/_layout.tsx`), evitando condiciones de carrera en la interfaz.
+- **Borrador de seguridad:** Mientras entrenas, los cambios se respaldan automáticamente en segundo plano. Si sales de la app o se apaga la pantalla, tu sesión no se pierde.
+- **Cálculo de semanas:** La semana del ciclo se calcula de forma automática según el estándar ISO de la fecha del entrenamiento.
+- **Rendimiento:** Las listas del historial utilizan renderizado virtualizado con `FlatList` y componentes memoizados para mantener 60 FPS estables incluso con cientos de registros.
 
-La base local `gym_tracker.db` se inicializa automáticamente al abrir la aplicación. Guarda las sesiones en tablas relacionadas de entrenamientos, ejercicios/series y cardio; no hace falta crear las tablas manualmente. En el formulario puedes cambiar la fecha (formato `AAAA-MM-DD`), agregar notas opcionales y especificar un grupo muscular para cada ejercicio. La semana ISO del año se calcula automáticamente a partir de la fecha y aparece en el historial; ya no hay un contador manual de semana del ciclo. El historial incluye un resumen por semana ISO y tipo de estímulo con el rango de lunes a domingo, los días distintos entrenados y las fechas registradas.
-
-Para registrar una sesión, pulsa **Comenzar**. Puedes pausarla y reanudarla con el mismo control; **Finalizar entrenamiento** detiene el cronómetro, guarda ejercicios, series y cardio, y limpia el formulario para la siguiente sesión. El botón para finalizar se activa después de comenzar la sesión.
-
-Si el dispositivo ya tenía sesiones guardadas en el formato anterior, la aplicación intenta importarlas automáticamente la primera vez que abre la nueva base. La columna `cycle_week` se conserva por compatibilidad con la base instalada, pero su valor se calcula usando la semana ISO de la fecha de cada sesión. Los registros nuevos y los eliminados se guardan en la base local del dispositivo. Desinstalar la app o borrar sus datos puede eliminar esos registros.
+---
 
 ## Problemas frecuentes
 
-- **`node` o `npm` no se reconoce:** reinicia VS Code después de instalar Node.js y confirma que la carpeta de Node.js esté en el `PATH` de Windows.
-- **No encuentra `expo/tsconfig.base`:** abre la terminal en la raíz del proyecto y ejecuta `npm install`; después reinicia el servidor de TypeScript.
-- **El teléfono no se conecta al QR:** comprueba la red Wi-Fi y que el firewall no esté bloqueando la conexión. Si la red no permite conexiones locales, inicia Expo en modo túnel desde el menú de la terminal de Expo.
-- **Cambiaste paquetes o `package-lock.json`:** ejecuta `npm install` otra vez y reinicia el servidor de Expo.
+- **`node` o `npm` no se reconoce:** Cierra y vuelve a abrir VS Code después de instalar Node.js, o actualiza la variable `$env:Path` en tu terminal actual.
+- **Error de ejecución de scripts en PowerShell:** Ejecuta `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force`.
+- **El teléfono no se conecta al código QR:** Comprueba que el teléfono y el PC compartan la misma red Wi-Fi. Si la red tiene aislamiento de clientes (habitual en redes universitarias o públicas), utiliza el modo túnel con `npx expo start --tunnel`.
+- **Desincronización de dependencias:** Ejecuta `npx expo install --fix` y luego `npx expo-doctor` para diagnosticar la configuración.
