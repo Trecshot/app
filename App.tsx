@@ -1,13 +1,16 @@
 import { StatusBar } from 'expo-status-bar';
-import { Activity, AlarmClock, Bike, CirclePlus, Dumbbell, History, Minus, Pause, Play, RotateCcw, Save, Trash2, TrendingDown, TrendingUp, X } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Activity, Bike, CirclePlus, Dumbbell, History, Minus, Save, Trash2, TrendingDown, TrendingUp, X } from 'lucide-react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, AppState, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { eliminarSesion, getIsoWeekNumber, getWeeklySummary, getWorkoutDetails, guardarSesion, initDatabase, obtenerSesiones } from './database';
+import { SessionTimerBanner, type SessionTimerHandle } from './src/components/SessionTimerBanner';
+import { clearDraft, loadDraft, saveDraft, type WorkoutDraft } from './src/storage/workoutDraft';
+import { c } from './src/theme';
 import { Cardio, Ejercicio, SesionEntrenamiento, Serie, WeeklySummary, WorkoutDetails } from './types';
 
 type Tab = 'entrenar' | 'historial';
 const modes: Cardio['modalidad'][] = ['Trotar', 'Caminar', 'Bicicleta', 'Cuerda', 'Otro'];
-const c = { ink: '#18221d', muted: '#66736b', paper: '#f5f7f2', white: '#fff', line: '#dce5dc', lime: '#c7ef6b', green: '#58742c', orange: '#f5a15a', orangeSoft: '#fff0df', red: '#c9554e' };
+const DRAFT_SAVE_DELAY_MS = 400;
 const id = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const serie = (): Serie => ({ id: id(), reps: 10, pesoKg: 0 });
 const ejercicio = (): Ejercicio => ({ id: id(), nombre: '', grupoMuscular: '', series: [serie()] });
@@ -27,12 +30,10 @@ const esFechaValida = (value: string) => {
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 };
-const clock = (s: number) => `${Math.floor(s / 3600).toString().padStart(2, '0')}:${Math.floor((s % 3600) / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('entrenar');
-  const [seconds, setSeconds] = useState(0);
-  const [running, setRunning] = useState(false);
+  const timerRef = useRef<SessionTimerHandle>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const [week, setWeek] = useState<'carga' | 'descarga'>('carga');
   const [sessionDate, setSessionDate] = useState(fechaHoyLocal);
@@ -42,16 +43,46 @@ export default function App() {
   const [history, setHistory] = useState<SesionEntrenamiento[]>([]);
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary[]>([]);
   const [loading, setLoading] = useState(false);
+  const [draftHydrated, setDraftHydrated] = useState(false);
 
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null);
   const [details, setDetails] = useState<{ workoutId: string; data: WorkoutDetails } | null>(null);
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
 
+  const handleSessionActiveChange = useCallback((active: boolean) => setSessionActive(active), []);
+
+  // Restaurar el borrador del entrenamiento en curso (si la app se cerró a mitad de sesión)
   useEffect(() => {
-    if (!running) return undefined;
-    const timer = setInterval(() => setSeconds((value) => value + 1), 1000);
-    return () => clearInterval(timer);
-  }, [running]);
+    let cancelled = false;
+    void loadDraft().then((draft) => {
+      if (cancelled) return;
+      if (draft) {
+        setWeek(draft.week);
+        setSessionDate(draft.sessionDate);
+        setNotes(draft.notes);
+        setExercises(draft.exercises);
+        setCardio(draft.cardio);
+      }
+      setDraftHydrated(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Guardar el borrador en segundo plano con debounce, y forzarlo al salir de la app
+  const latestDraftRef = useRef<WorkoutDraft | null>(null);
+  useEffect(() => {
+    if (!draftHydrated) return undefined;
+    const draft: WorkoutDraft = { week, sessionDate, notes, exercises, cardio };
+    latestDraftRef.current = draft;
+    const handle = setTimeout(() => { void saveDraft(draft); }, DRAFT_SAVE_DELAY_MS);
+    return () => clearTimeout(handle);
+  }, [draftHydrated, week, sessionDate, notes, exercises, cardio]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' && latestDraftRef.current) void saveDraft(latestDraftRef.current);
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => { void loadHistory(); }, []);
   async function loadHistory() {
@@ -97,14 +128,6 @@ export default function App() {
   function addSet(exerciseId: string) { setExercises((items) => items.map((item) => item.id === exerciseId ? { ...item, series: [...item.series, serie()] } : item)); }
   function removeSet(exerciseId: string, setId: string) { setExercises((items) => items.map((item) => item.id === exerciseId && item.series.length > 1 ? { ...item, series: item.series.filter((set) => set.id !== setId) } : item)); }
   function removeExercise(exerciseId: string) { setExercises((items) => items.length > 1 ? items.filter((item) => item.id !== exerciseId) : items); }
-  function toggleSession() {
-    if (!sessionActive) {
-      setSessionActive(true);
-      setRunning(true);
-      return;
-    }
-    setRunning((value) => !value);
-  }
 
   async function finishWorkout() {
     if (!sessionActive) {
@@ -118,14 +141,16 @@ export default function App() {
     const validExercises = exercises.filter((item) => item.nombre.trim());
     if (!validExercises.length) { Alert.alert('Agrega un ejercicio', 'Escribe al menos un nombre antes de guardar.'); return; }
     setLoading(true);
-    const workout: SesionEntrenamiento = { id: id(), fecha: sessionDate, ...(notes.trim() ? { notas: notes.trim() } : {}), duracionSegundos: seconds, tipoSemana: week, cycleWeek: getIsoWeekNumber(sessionDate), ejercicios: validExercises, cardio };
+    // Duración exacta calculada con marcas de tiempo, sin detener aún el cronómetro
+    const duracionSegundos = timerRef.current?.getElapsedSeconds() ?? 0;
+    const workout: SesionEntrenamiento = { id: id(), fecha: sessionDate, ...(notes.trim() ? { notas: notes.trim() } : {}), duracionSegundos, tipoSemana: week, cycleWeek: getIsoWeekNumber(sessionDate), ejercicios: validExercises, cardio };
     try {
       await guardarSesion(workout);
       setHistory((items) => [workout, ...items].sort((a, b) => b.fecha.localeCompare(a.fecha)));
       setWeeklySummary(await getWeeklySummary());
-      setRunning(false);
-      setSessionActive(false);
-      setSeconds(0);
+      // Solo tras guardar con éxito se limpia el cronómetro y el borrador
+      await timerRef.current?.reset();
+      await clearDraft();
       setNotes('');
       setExercises([ejercicio()]);
       setCardio(null);
@@ -150,12 +175,12 @@ export default function App() {
     ]);
   }
 
-  return <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+  return <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
     <SafeAreaView style={styles.safe}>
     <StatusBar style="dark" />
     <View style={styles.header}><View><Text style={styles.kicker}>MI ENTRENAMIENTO</Text><Text style={styles.title}>{tab === 'entrenar' ? 'Entrena con intención.' : 'Tu constancia.'}</Text></View><View style={styles.logo}><Dumbbell color={c.ink} size={22} /></View></View>
-    {tab === 'entrenar' ? <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={styles.timerCard}><View style={styles.rowBetween}><View style={styles.live}><View style={[styles.dot, running && styles.dotOn]} /><Text style={styles.liveText}>{running ? 'EN CURSO' : sessionActive ? 'SESIÓN PAUSADA' : 'LISTO PARA EMPEZAR'}</Text></View><AlarmClock color={c.lime} size={19} /></View><Text style={styles.timer}>{clock(seconds)}</Text><View style={styles.row}><Pressable style={styles.start} onPress={toggleSession}>{running ? <Pause color={c.ink} size={17} /> : <Play color={c.ink} size={17} />}<Text style={styles.startText}>{running ? 'Pausar' : sessionActive ? 'Reanudar' : 'Comenzar'}</Text></Pressable><Pressable accessibilityLabel="Reiniciar cronómetro" style={styles.reset} onPress={() => { setSeconds(0); setRunning(false); setSessionActive(false); }}><RotateCcw color={c.white} size={18} /></Pressable></View></View>
+    {tab === 'entrenar' ? <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <SessionTimerBanner ref={timerRef} onSessionActiveChange={handleSessionActiveChange} />
       <View style={styles.heading}><Text style={styles.headingText}>Semana</Text><Text style={styles.hint}>Planifica tu esfuerzo</Text></View><View style={styles.row}><Pressable style={[styles.week, week === 'carga' && styles.weekLoad]} onPress={() => selectWeek('carga')}><TrendingUp color={week === 'carga' ? c.ink : c.muted} size={18} /><Text style={styles.weekText}>Carga</Text></Pressable><Pressable style={[styles.week, week === 'descarga' && styles.weekDeload]} onPress={() => selectWeek('descarga')}><TrendingDown color={week === 'descarga' ? c.ink : c.muted} size={18} /><Text style={styles.weekText}>Descarga</Text></Pressable></View>
       <View style={sessionInfoStyles.card}>
         <Text style={styles.label}>FECHA · AAAA-MM-DD</Text>
