@@ -1,6 +1,7 @@
 import { Bike, CirclePlus, Dumbbell, Minus, Save, TrendingDown, TrendingUp, X } from 'lucide-react-native';
 import { useCallback, useRef, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,34 +13,91 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { getIsoWeekNumber } from '../../database';
+import { getIsoWeekNumber, guardarSesion } from '../../database';
 import { SessionTimerBanner, type SessionTimerHandle } from '../../src/components/SessionTimerBanner';
-import { esFechaValida, useWorkoutSession } from '../../src/hooks/useWorkoutSession';
+import {
+  createEmptyExercise,
+  createEmptySet,
+  useWorkoutSession,
+} from '../../src/hooks/useWorkoutSession';
 import { c } from '../../src/theme';
-import type { Cardio } from '../../types';
+import type { Cardio, SesionEntrenamiento } from '../../types';
 
 const modes: Cardio['modalidad'][] = ['Trotar', 'Caminar', 'Bicicleta', 'Cuerda', 'Otro'];
 const normalizarNumero = (txt: string) => parseFloat(txt.replace(',', '.')) || 0;
 
+const esFechaValida = (value: string): boolean => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [year, month, day] = match.slice(1).map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+};
+
 export default function WorkoutScreen() {
   const timerRef = useRef<SessionTimerHandle>(null);
   const [sessionActive, setSessionActive] = useState(false);
-  const { state, dispatch, finishWorkout, loading } = useWorkoutSession();
+  const [loading, setLoading] = useState(false);
+
+  const { state, dispatch, resetSession } = useWorkoutSession();
   const { week, sessionDate, notes, exercises, cardio } = state;
 
   const handleSessionActiveChange = useCallback((active: boolean) => {
     setSessionActive(active);
   }, []);
 
-  const handleFinishWorkout = useCallback(async () => {
-    await finishWorkout({
-      sessionActive,
-      getElapsedSeconds: () => timerRef.current?.getElapsedSeconds() ?? 0,
-      resetTimer: async () => {
-        await timerRef.current?.reset();
-      },
-    });
-  }, [finishWorkout, sessionActive]);
+  async function finishWorkout() {
+    if (!sessionActive) {
+      Alert.alert(
+        'Sesión no iniciada',
+        'Pulsa Comenzar para iniciar el entrenamiento antes de finalizarlo.',
+      );
+      return;
+    }
+    if (!esFechaValida(sessionDate)) {
+      Alert.alert('Fecha no válida', 'Escribe la fecha con el formato AAAA-MM-DD.');
+      return;
+    }
+    const validExercises = exercises.filter((item) => item.nombre.trim());
+    if (!validExercises.length) {
+      Alert.alert(
+        'Agrega un ejercicio',
+        'Escribe al menos un nombre antes de guardar.',
+      );
+      return;
+    }
+
+    setLoading(true);
+    const duracionSegundos = timerRef.current?.getElapsedSeconds() ?? 0;
+    const workout: SesionEntrenamiento = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      fecha: sessionDate,
+      ...(notes.trim() ? { notas: notes.trim() } : {}),
+      duracionSegundos,
+      tipoSemana: week,
+      cycleWeek: getIsoWeekNumber(sessionDate),
+      ejercicios: validExercises,
+      cardio,
+    };
+
+    try {
+      await guardarSesion(workout);
+      await timerRef.current?.reset();
+      resetSession();
+      Alert.alert(
+        '¡Entrenamiento finalizado!',
+        'La sesión se guardó correctamente.',
+      );
+    } catch {
+      Alert.alert('No se pudo guardar', 'Comprueba la base de datos local.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -86,7 +144,7 @@ export default function WorkoutScreen() {
             <Text style={styles.label}>FECHA · AAAA-MM-DD</Text>
             <TextInput
               value={sessionDate}
-              onChangeText={(text) => dispatch({ type: 'SET_METADATA', payload: { date: text } })}
+              onChangeText={(text) => dispatch({ type: 'SET_METADATA', payload: { sessionDate: text } })}
               placeholder="2026-10-02"
               keyboardType="numbers-and-punctuation"
               style={styles.input}
@@ -117,8 +175,8 @@ export default function WorkoutScreen() {
                 <Text style={styles.number}>0{index + 1}</Text>
                 <TextInput
                   value={item.nombre}
-                  onChangeText={(name) =>
-                    dispatch({ type: 'UPDATE_EXERCISE', payload: { exerciseId: item.id, name } })
+                  onChangeText={(value) =>
+                    dispatch({ type: 'UPDATE_EXERCISE', payload: { exerciseId: item.id, nombre: value } })
                   }
                   placeholder="Nombre del ejercicio"
                   placeholderTextColor="#9aa59d"
@@ -133,8 +191,8 @@ export default function WorkoutScreen() {
               </View>
               <TextInput
                 value={item.grupoMuscular ?? ''}
-                onChangeText={(muscleGroup) =>
-                  dispatch({ type: 'UPDATE_EXERCISE', payload: { exerciseId: item.id, muscleGroup } })
+                onChangeText={(value) =>
+                  dispatch({ type: 'UPDATE_EXERCISE', payload: { exerciseId: item.id, grupoMuscular: value } })
                 }
                 placeholder="Grupo muscular (p. ej. Pecho)"
                 placeholderTextColor="#9aa59d"
@@ -152,14 +210,14 @@ export default function WorkoutScreen() {
                   <Text style={styles.setNumber}>{setIndex + 1}</Text>
                   <TextInput
                     value={String(set.reps)}
-                    onChangeText={(val) =>
+                    onChangeText={(value) =>
                       dispatch({
                         type: 'UPDATE_SET',
                         payload: {
                           exerciseId: item.id,
                           setId: set.id,
                           field: 'reps',
-                          value: normalizarNumero(val),
+                          value: normalizarNumero(value),
                         },
                       })
                     }
@@ -168,14 +226,14 @@ export default function WorkoutScreen() {
                   />
                   <TextInput
                     value={String(set.pesoKg)}
-                    onChangeText={(val) =>
+                    onChangeText={(value) =>
                       dispatch({
                         type: 'UPDATE_SET',
                         payload: {
                           exerciseId: item.id,
                           setId: set.id,
                           field: 'pesoKg',
-                          value: normalizarNumero(val),
+                          value: normalizarNumero(value),
                         },
                       })
                     }
@@ -197,7 +255,12 @@ export default function WorkoutScreen() {
               ))}
               <Pressable
                 style={styles.addSet}
-                onPress={() => dispatch({ type: 'ADD_SET', payload: { exerciseId: item.id } })}
+                onPress={() =>
+                  dispatch({
+                    type: 'ADD_SET',
+                    payload: { exerciseId: item.id, set: createEmptySet() },
+                  })
+                }
               >
                 <CirclePlus color={c.green} size={17} />
                 <Text style={styles.addSetText}>Añadir serie</Text>
@@ -205,7 +268,10 @@ export default function WorkoutScreen() {
             </View>
           ))}
 
-          <Pressable style={styles.outline} onPress={() => dispatch({ type: 'ADD_EXERCISE' })}>
+          <Pressable
+            style={styles.outline}
+            onPress={() => dispatch({ type: 'ADD_EXERCISE', payload: createEmptyExercise() })}
+          >
             <CirclePlus color={c.ink} size={18} />
             <Text style={styles.outlineText}>Añadir ejercicio</Text>
           </Pressable>
@@ -286,7 +352,7 @@ export default function WorkoutScreen() {
             style={[styles.save, styles.finish, (!sessionActive || loading) && styles.disabled]}
             disabled={!sessionActive || loading}
             onPress={() => {
-              void handleFinishWorkout();
+              void finishWorkout();
             }}
           >
             <Save color={c.white} size={19} />

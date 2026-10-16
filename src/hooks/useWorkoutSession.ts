@@ -1,155 +1,79 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState } from 'react-native';
-import { getIsoWeekNumber, guardarSesion } from '../../database';
-import { clearDraft, loadDraft, saveDraft, type WorkoutDraft } from '../storage/workoutDraft';
-import {
-  useWorkoutReducer,
-  type WorkoutAction,
-  type WorkoutState,
-} from './useWorkoutReducer';
-import type { SesionEntrenamiento } from '../../types';
+import { useReducer, useEffect, useRef, useState, useCallback } from 'react';
+import { AppState } from 'react-native';
+import { workoutReducer, type WorkoutState } from './useWorkoutReducer';
+import { loadDraft, saveDraft, clearDraft } from '../storage/workoutDraft';
+import type { Ejercicio, Serie } from '../../types';
 
-const DRAFT_SAVE_DELAY_MS = 400;
-
+// Utilidades estáticas
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+export const createEmptySet = (): Serie => ({ id: generateId(), reps: 10, pesoKg: 0 });
+export const createEmptyExercise = (): Ejercicio => ({ id: generateId(), nombre: '', grupoMuscular: '', series: [createEmptySet()] });
 
-export const esFechaValida = (value: string): boolean => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const [year, month, day] = match.slice(1).map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
+export const getLocalTodayDate = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 };
 
-export interface UseWorkoutSessionResult {
-  state: WorkoutState;
-  dispatch: React.Dispatch<WorkoutAction>;
-  finishWorkout: (options: {
-    sessionActive: boolean;
-    getElapsedSeconds: () => number;
-    resetTimer: () => Promise<void>;
-  }) => Promise<boolean>;
-  draftHydrated: boolean;
-  loading: boolean;
-}
+export const INITIAL_STATE: WorkoutState = {
+  week: 'carga',
+  sessionDate: getLocalTodayDate(),
+  notes: '',
+  exercises: [createEmptyExercise()],
+  cardio: null,
+};
 
-export function useWorkoutSession(): UseWorkoutSessionResult {
-  const [state, dispatch] = useWorkoutReducer();
-  const [draftHydrated, setDraftHydrated] = useState(false);
-  const [loading, setLoading] = useState(false);
+export function useWorkoutSession() {
+  const [state, dispatch] = useReducer(workoutReducer, INITIAL_STATE);
+  const [isDraftHydrated, setIsDraftHydrated] = useState(false);
+  const stateRef = useRef(state);
 
-  // 1. Restaurar el borrador persistido al montar
+  // Sincronizar referencia estática para el listener de AppState
   useEffect(() => {
-    let cancelled = false;
+    stateRef.current = state;
+  }, [state]);
+
+  // Recuperación del borrador temporal
+  useEffect(() => {
+    let isCancelled = false;
     void loadDraft().then((draft) => {
-      if (cancelled) return;
+      if (isCancelled) return;
       if (draft) {
-        dispatch({ type: 'HYDRATE_DRAFT', payload: draft });
+        dispatch({ type: 'HYDRATE', payload: draft });
       }
-      setDraftHydrated(true);
+      setIsDraftHydrated(true);
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [dispatch]);
+    return () => { isCancelled = true; };
+  }, []);
 
-  // 2. Persistir borrador en segundo plano con debounce de 400ms
-  const latestDraftRef = useRef<WorkoutDraft | null>(null);
+  // Motor de Autoguardado (Debouncing)
   useEffect(() => {
-    if (!draftHydrated) return undefined;
-    const draft: WorkoutDraft = {
-      week: state.week,
-      sessionDate: state.sessionDate,
-      notes: state.notes,
-      exercises: state.exercises,
-      cardio: state.cardio,
-    };
-    latestDraftRef.current = draft;
-    const handle = setTimeout(() => {
-      void saveDraft(draft);
-    }, DRAFT_SAVE_DELAY_MS);
-    return () => clearTimeout(handle);
-  }, [draftHydrated, state]);
+    if (!isDraftHydrated) return;
+    const timeoutId = setTimeout(() => {
+      void saveDraft(state);
+    }, 400);
+    return () => clearTimeout(timeoutId);
+  }, [state, isDraftHydrated]);
 
-  // Asegurar persistencia forzada al pasar a segundo plano
+  // Serialización en plano secundario ante suspensión del SO
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (next) => {
-      if (next !== 'active' && latestDraftRef.current) {
-        void saveDraft(latestDraftRef.current);
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active' && isDraftHydrated) {
+        void saveDraft(stateRef.current);
       }
     });
     return () => subscription.remove();
+  }, [isDraftHydrated]);
+
+  const resetSession = useCallback(() => {
+    const freshState = { ...INITIAL_STATE, sessionDate: getLocalTodayDate() };
+    dispatch({ type: 'RESET', payload: freshState });
+    void clearDraft();
   }, []);
-
-  // 3. Persistencia en SQLite al finalizar entrenamiento
-  const finishWorkout = useCallback(
-    async (options: {
-      sessionActive: boolean;
-      getElapsedSeconds: () => number;
-      resetTimer: () => Promise<void>;
-    }): Promise<boolean> => {
-      if (!options.sessionActive) {
-        Alert.alert(
-          'Sesión no iniciada',
-          'Pulsa Comenzar para iniciar el entrenamiento antes de finalizarlo.',
-        );
-        return false;
-      }
-      if (!esFechaValida(state.sessionDate)) {
-        Alert.alert('Fecha no válida', 'Escribe la fecha con el formato AAAA-MM-DD.');
-        return false;
-      }
-      const validExercises = state.exercises.filter((item) => item.nombre.trim());
-      if (!validExercises.length) {
-        Alert.alert(
-          'Agrega un ejercicio',
-          'Escribe al menos un nombre antes de guardar.',
-        );
-        return false;
-      }
-
-      setLoading(true);
-      const duracionSegundos = options.getElapsedSeconds();
-      const workout: SesionEntrenamiento = {
-        id: generateId(),
-        fecha: state.sessionDate,
-        ...(state.notes.trim() ? { notas: state.notes.trim() } : {}),
-        duracionSegundos,
-        tipoSemana: state.week,
-        cycleWeek: getIsoWeekNumber(state.sessionDate),
-        ejercicios: validExercises,
-        cardio: state.cardio,
-      };
-
-      try {
-        await guardarSesion(workout);
-        await options.resetTimer();
-        dispatch({ type: 'RESET' });
-        await clearDraft();
-        Alert.alert(
-          '¡Entrenamiento finalizado!',
-          'La sesión se guardó correctamente.',
-        );
-        return true;
-      } catch {
-        Alert.alert('No se pudo guardar', 'Comprueba la base de datos local.');
-        return false;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [state, dispatch],
-  );
 
   return {
     state,
     dispatch,
-    finishWorkout,
-    draftHydrated,
-    loading,
+    isDraftHydrated,
+    resetSession,
   };
 }
