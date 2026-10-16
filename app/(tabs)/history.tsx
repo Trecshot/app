@@ -1,5 +1,5 @@
 import { Activity, Dumbbell, History as HistoryIcon, Trash2 } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -9,9 +9,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import { eliminarSesion, getWeeklySummary, getWorkoutDetails, initDatabase, obtenerSesiones } from '../../database';
+import { getWorkoutDetails } from '../../database';
+import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { c } from '../../src/theme';
-import type { SesionEntrenamiento, WeeklySummary, WorkoutDetails } from '../../types';
+import type { SesionEntrenamiento, WorkoutDetails } from '../../types';
 
 const formatoFechaCorta = (dateValue: string) => {
   const [year, month, day] = dateValue.split('-');
@@ -19,40 +20,11 @@ const formatoFechaCorta = (dateValue: string) => {
 };
 
 export default function HistoryScreen() {
-  const [history, setHistory] = useState<SesionEntrenamiento[]>([]);
-  const [weeklySummary, setWeeklySummary] = useState<WeeklySummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { history, weeklySummary, loading, deleteWorkout } = useWorkoutHistory();
 
   const [expandedWorkoutId, setExpandedWorkoutId] = useState<string | null>(null);
   const [details, setDetails] = useState<{ workoutId: string; data: WorkoutDetails } | null>(null);
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    let ignore = false;
-    async function fetchData() {
-      try {
-        await initDatabase();
-        const [sessions, summary] = await Promise.all([
-          obtenerSesiones(),
-          getWeeklySummary(),
-        ]);
-        if (!ignore) {
-          setHistory(sessions);
-          setWeeklySummary(summary);
-          setLoading(false);
-        }
-      } catch {
-        if (!ignore) {
-          setLoading(false);
-          Alert.alert('No se pudo abrir el historial', 'La base de datos local no respondió.');
-        }
-      }
-    }
-    void fetchData();
-    return () => {
-      ignore = true;
-    };
-  }, []);
 
   async function toggleWorkoutDetails(workoutId: string) {
     if (expandedWorkoutId === workoutId) {
@@ -69,16 +41,6 @@ export default function HistoryScreen() {
       setDetails({ workoutId, data: workoutDetails });
     } finally {
       setDetailsLoadingId((current) => (current === workoutId ? null : current));
-    }
-  }
-
-  async function deleteWorkout(workoutId: string) {
-    try {
-      await eliminarSesion(workoutId);
-      setHistory((items) => items.filter((item) => item.id !== workoutId));
-      setWeeklySummary(await getWeeklySummary());
-    } catch {
-      Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo.');
     }
   }
 

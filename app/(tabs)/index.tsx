@@ -16,15 +16,14 @@ import {
 } from 'react-native';
 import { getIsoWeekNumber, guardarSesion } from '../../database';
 import { SessionTimerBanner, type SessionTimerHandle } from '../../src/components/SessionTimerBanner';
+import { useWorkoutReducer } from '../../src/hooks/useWorkoutReducer';
 import { clearDraft, loadDraft, saveDraft, type WorkoutDraft } from '../../src/storage/workoutDraft';
 import { c } from '../../src/theme';
-import type { Cardio, Ejercicio, Serie, SesionEntrenamiento } from '../../types';
+import type { Cardio, SesionEntrenamiento } from '../../types';
 
 const modes: Cardio['modalidad'][] = ['Trotar', 'Caminar', 'Bicicleta', 'Cuerda', 'Otro'];
 const DRAFT_SAVE_DELAY_MS = 400;
 const id = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const serie = (): Serie => ({ id: id(), reps: 10, pesoKg: 0 });
-const ejercicio = (): Ejercicio => ({ id: id(), nombre: '', grupoMuscular: '', series: [serie()] });
 const normalizarNumero = (txt: string) => parseFloat(txt.replace(',', '.')) || 0;
 const fechaHoyLocal = () => {
   const today = new Date();
@@ -44,7 +43,7 @@ export default function WorkoutScreen() {
   const [week, setWeek] = useState<'carga' | 'descarga'>('carga');
   const [sessionDate, setSessionDate] = useState(fechaHoyLocal);
   const [notes, setNotes] = useState('');
-  const [exercises, setExercises] = useState<Ejercicio[]>([ejercicio()]);
+  const { exercises, dispatch } = useWorkoutReducer();
   const [cardio, setCardio] = useState<Cardio | null>(null);
   const [loading, setLoading] = useState(false);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -60,7 +59,9 @@ export default function WorkoutScreen() {
         setWeek(draft.week);
         setSessionDate(draft.sessionDate);
         setNotes(draft.notes);
-        setExercises(draft.exercises);
+        if (draft.exercises && draft.exercises.length > 0) {
+          dispatch({ type: 'SET_EXERCISES', payload: draft.exercises });
+        }
         setCardio(draft.cardio);
       }
       setDraftHydrated(true);
@@ -68,7 +69,7 @@ export default function WorkoutScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [dispatch]);
 
   // Guardar el borrador en segundo plano con debounce y forzar al salir
   const latestDraftRef = useRef<WorkoutDraft | null>(null);
@@ -94,40 +95,28 @@ export default function WorkoutScreen() {
   }
 
   function updateExercise(exerciseId: string, name: string) {
-    setExercises((items) => items.map((item) => (item.id === exerciseId ? { ...item, nombre: name } : item)));
+    dispatch({ type: 'UPDATE_EXERCISE_NAME', payload: { exerciseId, name } });
   }
 
   function updateMuscleGroup(exerciseId: string, muscleGroup: string) {
-    setExercises((items) => (items.map((item) => (item.id === exerciseId ? { ...item, grupoMuscular: muscleGroup } : item))));
+    dispatch({ type: 'UPDATE_MUSCLE_GROUP', payload: { exerciseId, muscleGroup } });
   }
 
   function updateSet(exerciseId: string, setId: string, field: 'reps' | 'pesoKg', value: string) {
     const number = normalizarNumero(value);
-    setExercises((items) =>
-      items.map((item) =>
-        item.id === exerciseId
-          ? { ...item, series: item.series.map((set) => (set.id === setId ? { ...set, [field]: number } : set)) }
-          : item,
-      ),
-    );
+    dispatch({ type: 'UPDATE_SET', payload: { exerciseId, setId, field, value: number } });
   }
 
   function addSet(exerciseId: string) {
-    setExercises((items) => items.map((item) => (item.id === exerciseId ? { ...item, series: [...item.series, serie()] } : item)));
+    dispatch({ type: 'ADD_SET', payload: { exerciseId } });
   }
 
   function removeSet(exerciseId: string, setId: string) {
-    setExercises((items) =>
-      items.map((item) =>
-        item.id === exerciseId && item.series.length > 1
-          ? { ...item, series: item.series.filter((set) => set.id !== setId) }
-          : item,
-      ),
-    );
+    dispatch({ type: 'REMOVE_SET', payload: { exerciseId, setId } });
   }
 
   function removeExercise(exerciseId: string) {
-    setExercises((items) => (items.length > 1 ? items.filter((item) => item.id !== exerciseId) : items));
+    dispatch({ type: 'REMOVE_EXERCISE', payload: { exerciseId } });
   }
 
   async function finishWorkout() {
@@ -161,7 +150,7 @@ export default function WorkoutScreen() {
       await timerRef.current?.reset();
       await clearDraft();
       setNotes('');
-      setExercises([ejercicio()]);
+      dispatch({ type: 'RESET_EXERCISES' });
       setCardio(null);
       setSessionDate(fechaHoyLocal());
       Alert.alert('¡Entrenamiento finalizado!', 'La sesión se guardó correctamente.');
@@ -286,7 +275,7 @@ export default function WorkoutScreen() {
             </View>
           ))}
 
-          <Pressable style={styles.outline} onPress={() => setExercises((items) => [...items, ejercicio()])}>
+          <Pressable style={styles.outline} onPress={() => dispatch({ type: 'ADD_EXERCISE' })}>
             <CirclePlus color={c.ink} size={18} />
             <Text style={styles.outlineText}>Añadir ejercicio</Text>
           </Pressable>
