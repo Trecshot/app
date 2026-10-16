@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 import type { Cardio, CardioLog, Ejercicio, ExerciseLog, SesionEntrenamiento, WeeklySummary, Workout, WorkoutDetails } from './types';
 
@@ -88,11 +89,16 @@ async function migrateAutomaticCycleWeeks(db: SQLite.SQLiteDatabase): Promise<vo
 
   const workouts = await db.getAllAsync<{ id: number; date: string }>('SELECT id, date FROM workouts;');
   await db.withTransactionAsync(async () => {
-    for (const workout of workouts) {
-      const cycleWeek = getIsoWeekNumber(workout.date);
-      if (Number.isInteger(cycleWeek) && cycleWeek > 0) {
-        await db.runAsync('UPDATE workouts SET cycle_week = ? WHERE id = ?;', [cycleWeek, workout.id]);
+    const statement = await db.prepareAsync('UPDATE workouts SET cycle_week = $cycleWeek WHERE id = $id;');
+    try {
+      for (const workout of workouts) {
+        const cycleWeek = getIsoWeekNumber(workout.date);
+        if (Number.isInteger(cycleWeek) && cycleWeek > 0) {
+          await statement.executeAsync({ $cycleWeek: cycleWeek, $id: workout.id });
+        }
       }
+    } finally {
+      await statement.finalizeAsync();
     }
     await db.execAsync('PRAGMA user_version = 1;');
   });
@@ -211,11 +217,11 @@ export async function saveWorkout(
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
           [
             workoutId,
-            exercise.exerciseId ?? `exercise-${index}`,
+            exercise.exerciseId ?? Crypto.randomUUID(),
             exercise.exerciseOrder ?? index,
             exercise.exerciseName,
             exercise.muscleGroup,
-            exercise.setId ?? `${index}-${exercise.setNumber}`,
+            exercise.setId ?? Crypto.randomUUID(),
             exercise.setNumber,
             exercise.reps,
             exercise.weight,
@@ -238,7 +244,7 @@ export async function saveWorkout(
 }
 
 function createClientId(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  return Crypto.randomUUID();
 }
 
 export async function getWorkoutsHistory(): Promise<(Workout & { id: number })[]> {
@@ -331,72 +337,142 @@ export async function getWorkoutDetails(workoutId: number | string): Promise<Wor
   }
 }
 
-export async function obtenerSesiones(): Promise<SesionEntrenamiento[]> {
-  const db = await getDatabase();
-  const workouts = await getWorkoutsHistory();
-  const exerciseRows = await db.getAllAsync<{
-    id: number;
-    workout_id: number;
-    exercise_id: string;
-    exercise_order: number;
-    exercise_name: string;
-    muscle_group: string;
-    set_id: string;
-    set_number: number;
-    reps: number;
-    weight: number;
-  }>(
-    'SELECT id, workout_id, exercise_id, exercise_order, exercise_name, muscle_group, set_id, set_number, reps, weight FROM exercise_logs ORDER BY workout_id, exercise_order, set_number;',
-  );
-  const cardioRows = await db.getAllAsync<{
-    workout_id: number;
-    cardio_type: string;
-    level: number | null;
-    distance_km: number | null;
-    duration_minutes: number;
-  }>('SELECT workout_id, cardio_type, level, distance_km, duration_minutes FROM cardio_logs;');
+export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEntrenamiento[]> {
+  try {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<{
+      id: number;
+      clientId: string;
+      fecha: string;
+      tipoSemana: Workout['weekType'];
+      cycleWeek: number;
+      notas: string | null;
+      duracionSegundos: number;
+      ejercicios_json: string | null;
+      cardio_json: string | null;
+    }>(
+      `SELECT 
+        w.id,
+        w.client_id AS clientId,
+        w.date AS fecha,
+        w.week_type AS tipoSemana,
+        w.cycle_week AS cycleWeek,
+        w.notes AS notas,
+        w.duration_seconds AS duracionSegundos,
+        (
+          SELECT json_group_array(
+            json_object(
+              'id', e.exercise_id, 
+              'nombre', e.exercise_name,
+              'grupoMuscular', e.muscle_group,
+              'series', (
+                SELECT json_group_array(
+                  json_object(
+                    'id', s.set_id,
+                    'reps', s.reps,
+                    'pesoKg', s.weight
+                  )
+                )
+                FROM exercise_logs s 
+                WHERE s.workout_id = w.id AND s.exercise_id = e.exercise_id
+                ORDER BY s.set_number ASC
+              )
+            )
+          )
+          FROM (
+            SELECT 
+              exercise_id, 
+              exercise_name, 
+              muscle_group, 
+              MIN(exercise_order) AS min_order
+            FROM exercise_logs 
+            WHERE workout_id = w.id 
+            GROUP BY exercise_id, exercise_name, muscle_group
+            ORDER BY min_order ASC
+          ) e
+        ) AS ejercicios_json,
+        (
+          SELECT json_object(
+            'realizado', 1,
+            'modalidad', c.cardio_type,
+            'tiempoMin', c.duration_minutes,
+            'velocidadNivel', c.level,
+            'distanciaKm', c.distance_km
+          )
+          FROM cardio_logs c
+          WHERE c.workout_id = w.id
+          LIMIT 1
+        ) AS cardio_json
+      FROM workouts w
+      ORDER BY w.date DESC, w.id DESC
+      LIMIT ? OFFSET ?;`,
+      [limit, offset],
+    );
 
-  const exercisesByWorkout = new Map<number, Map<string, Ejercicio>>();
-  for (const row of exerciseRows) {
-    let exercises = exercisesByWorkout.get(row.workout_id);
-    if (!exercises) {
-      exercises = new Map<string, Ejercicio>();
-      exercisesByWorkout.set(row.workout_id, exercises);
-    }
-    let exercise = exercises.get(row.exercise_id);
-    if (!exercise) {
-      exercise = { id: row.exercise_id, nombre: row.exercise_name, grupoMuscular: row.muscle_group, series: [] };
-      exercises.set(row.exercise_id, exercise);
-    }
-    exercise.series.push({ id: row.set_id || String(row.id), reps: row.reps, pesoKg: row.weight });
+    return rows.map((row) => {
+      let ejercicios: Ejercicio[] = [];
+      if (row.ejercicios_json) {
+        try {
+          const parsed = JSON.parse(row.ejercicios_json) as unknown[];
+          if (Array.isArray(parsed)) {
+            ejercicios = parsed.map((e: any) => ({
+              id: String(e.id ?? Crypto.randomUUID()),
+              nombre: String(e.nombre ?? ''),
+              ...(e.grupoMuscular ? { grupoMuscular: String(e.grupoMuscular) } : {}),
+              series: Array.isArray(e.series)
+                ? e.series.map((s: any) => ({
+                    id: String(s.id ?? Crypto.randomUUID()),
+                    reps: Number(s.reps ?? 0),
+                    pesoKg: Number(s.pesoKg ?? 0),
+                  }))
+                : [],
+            }));
+          }
+        } catch (err) {
+          console.error('Error al deserializar ejercicios JSON:', err);
+        }
+      }
+
+      let cardio: Cardio | null = null;
+      if (row.cardio_json) {
+        try {
+          const parsed = JSON.parse(row.cardio_json) as {
+            modalidad: Cardio['modalidad'];
+            tiempoMin: number;
+            velocidadNivel?: number | null;
+            distanciaKm?: number | null;
+          };
+          cardio = {
+            realizado: true,
+            modalidad: parsed.modalidad,
+            tiempoMin: Number(parsed.tiempoMin ?? 0),
+            ...(parsed.velocidadNivel !== null && parsed.velocidadNivel !== undefined
+              ? { velocidadNivel: Number(parsed.velocidadNivel) }
+              : {}),
+            ...(parsed.distanciaKm !== null && parsed.distanciaKm !== undefined
+              ? { distanciaKm: Number(parsed.distanciaKm) }
+              : {}),
+          };
+        } catch (err) {
+          console.error('Error al deserializar cardio JSON:', err);
+        }
+      }
+
+      return {
+        id: row.clientId || String(row.id),
+        fecha: row.fecha,
+        ...(row.notas ? { notas: row.notas } : {}),
+        duracionSegundos: row.duracionSegundos ?? 0,
+        tipoSemana: row.tipoSemana,
+        cycleWeek: row.cycleWeek || getIsoWeekNumber(row.fecha),
+        ejercicios,
+        cardio,
+      };
+    });
+  } catch (error) {
+    console.error('Error al obtener sesiones:', error);
+    return [];
   }
-
-  const cardioByWorkout = new Map<number, Cardio>();
-  for (const row of cardioRows) {
-    const cardio: Cardio = {
-      realizado: true,
-      modalidad: row.cardio_type as Cardio['modalidad'],
-      tiempoMin: row.duration_minutes,
-    };
-    if (row.level !== null) cardio.velocidadNivel = row.level;
-    if (row.distance_km !== null) cardio.distanciaKm = row.distance_km;
-    cardioByWorkout.set(row.workout_id, cardio);
-  }
-
-  return workouts.map((workout) => {
-    const workoutId = workout.id;
-    const workoutExercises = [...(exercisesByWorkout.get(workoutId)?.values() ?? [])];
-    return {
-      id: workout.clientId ?? String(workoutId),
-      fecha: workout.date,
-      ...(workout.notes ? { notas: workout.notes } : {}),
-      duracionSegundos: workout.durationSeconds ?? 0,
-      tipoSemana: workout.weekType,
-      cycleWeek: workout.cycleWeek,
-      ejercicios: workoutExercises,
-      cardio: cardioByWorkout.get(workoutId) ?? null,
-    };
-  });
 }
 
 export async function eliminarSesion(id: string): Promise<void> {

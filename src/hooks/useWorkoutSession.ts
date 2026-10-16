@@ -1,3 +1,4 @@
+import * as Crypto from 'expo-crypto';
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react';
 import { Alert, AppState } from 'react-native';
 import { workoutReducer, type WorkoutState } from './useWorkoutReducer';
@@ -6,7 +7,7 @@ import { getIsoWeekNumber, guardarSesion } from '../../database';
 import type { Ejercicio, Serie, SesionEntrenamiento } from '../../types';
 
 // Utilidades estáticas
-const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const generateId = () => Crypto.randomUUID();
 export const createEmptySet = (): Serie => ({ id: generateId(), reps: 10, pesoKg: 0 });
 export const createEmptyExercise = (): Ejercicio => ({ id: generateId(), nombre: '', grupoMuscular: '', series: [createEmptySet()] });
 
