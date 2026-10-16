@@ -1,8 +1,6 @@
 import { Bike, CirclePlus, Dumbbell, Minus, Save, TrendingDown, TrendingUp, X } from 'lucide-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
-  Alert,
-  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,152 +12,34 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { getIsoWeekNumber, guardarSesion } from '../../database';
+import { getIsoWeekNumber } from '../../database';
 import { SessionTimerBanner, type SessionTimerHandle } from '../../src/components/SessionTimerBanner';
-import { useWorkoutReducer } from '../../src/hooks/useWorkoutReducer';
-import { clearDraft, loadDraft, saveDraft, type WorkoutDraft } from '../../src/storage/workoutDraft';
+import { esFechaValida, useWorkoutSession } from '../../src/hooks/useWorkoutSession';
 import { c } from '../../src/theme';
-import type { Cardio, SesionEntrenamiento } from '../../types';
+import type { Cardio } from '../../types';
 
 const modes: Cardio['modalidad'][] = ['Trotar', 'Caminar', 'Bicicleta', 'Cuerda', 'Otro'];
-const DRAFT_SAVE_DELAY_MS = 400;
-const id = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const normalizarNumero = (txt: string) => parseFloat(txt.replace(',', '.')) || 0;
-const fechaHoyLocal = () => {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-};
-const esFechaValida = (value: string) => {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const [year, month, day] = match.slice(1).map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-};
 
 export default function WorkoutScreen() {
   const timerRef = useRef<SessionTimerHandle>(null);
   const [sessionActive, setSessionActive] = useState(false);
-  const [week, setWeek] = useState<'carga' | 'descarga'>('carga');
-  const [sessionDate, setSessionDate] = useState(fechaHoyLocal);
-  const [notes, setNotes] = useState('');
-  const { exercises, dispatch } = useWorkoutReducer();
-  const [cardio, setCardio] = useState<Cardio | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [draftHydrated, setDraftHydrated] = useState(false);
+  const { state, dispatch, finishWorkout, loading } = useWorkoutSession();
+  const { week, sessionDate, notes, exercises, cardio } = state;
 
-  const handleSessionActiveChange = useCallback((active: boolean) => setSessionActive(active), []);
-
-  // Restaurar el borrador del entrenamiento en curso
-  useEffect(() => {
-    let cancelled = false;
-    void loadDraft().then((draft) => {
-      if (cancelled) return;
-      if (draft) {
-        setWeek(draft.week);
-        setSessionDate(draft.sessionDate);
-        setNotes(draft.notes);
-        if (draft.exercises && draft.exercises.length > 0) {
-          dispatch({ type: 'SET_EXERCISES', payload: draft.exercises });
-        }
-        setCardio(draft.cardio);
-      }
-      setDraftHydrated(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [dispatch]);
-
-  // Guardar el borrador en segundo plano con debounce y forzar al salir
-  const latestDraftRef = useRef<WorkoutDraft | null>(null);
-  useEffect(() => {
-    if (!draftHydrated) return undefined;
-    const draft: WorkoutDraft = { week, sessionDate, notes, exercises, cardio };
-    latestDraftRef.current = draft;
-    const handle = setTimeout(() => {
-      void saveDraft(draft);
-    }, DRAFT_SAVE_DELAY_MS);
-    return () => clearTimeout(handle);
-  }, [draftHydrated, week, sessionDate, notes, exercises, cardio]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (next) => {
-      if (next !== 'active' && latestDraftRef.current) void saveDraft(latestDraftRef.current);
-    });
-    return () => subscription.remove();
+  const handleSessionActiveChange = useCallback((active: boolean) => {
+    setSessionActive(active);
   }, []);
 
-  function selectWeek(value: 'carga' | 'descarga') {
-    setWeek(value);
-  }
-
-  function updateExercise(exerciseId: string, name: string) {
-    dispatch({ type: 'UPDATE_EXERCISE_NAME', payload: { exerciseId, name } });
-  }
-
-  function updateMuscleGroup(exerciseId: string, muscleGroup: string) {
-    dispatch({ type: 'UPDATE_MUSCLE_GROUP', payload: { exerciseId, muscleGroup } });
-  }
-
-  function updateSet(exerciseId: string, setId: string, field: 'reps' | 'pesoKg', value: string) {
-    const number = normalizarNumero(value);
-    dispatch({ type: 'UPDATE_SET', payload: { exerciseId, setId, field, value: number } });
-  }
-
-  function addSet(exerciseId: string) {
-    dispatch({ type: 'ADD_SET', payload: { exerciseId } });
-  }
-
-  function removeSet(exerciseId: string, setId: string) {
-    dispatch({ type: 'REMOVE_SET', payload: { exerciseId, setId } });
-  }
-
-  function removeExercise(exerciseId: string) {
-    dispatch({ type: 'REMOVE_EXERCISE', payload: { exerciseId } });
-  }
-
-  async function finishWorkout() {
-    if (!sessionActive) {
-      Alert.alert('Sesión no iniciada', 'Pulsa Comenzar para iniciar el entrenamiento antes de finalizarlo.');
-      return;
-    }
-    if (!esFechaValida(sessionDate)) {
-      Alert.alert('Fecha no válida', 'Escribe la fecha con el formato AAAA-MM-DD.');
-      return;
-    }
-    const validExercises = exercises.filter((item) => item.nombre.trim());
-    if (!validExercises.length) {
-      Alert.alert('Agrega un ejercicio', 'Escribe al menos un nombre antes de guardar.');
-      return;
-    }
-    setLoading(true);
-    const duracionSegundos = timerRef.current?.getElapsedSeconds() ?? 0;
-    const workout: SesionEntrenamiento = {
-      id: id(),
-      fecha: sessionDate,
-      ...(notes.trim() ? { notas: notes.trim() } : {}),
-      duracionSegundos,
-      tipoSemana: week,
-      cycleWeek: getIsoWeekNumber(sessionDate),
-      ejercicios: validExercises,
-      cardio,
-    };
-    try {
-      await guardarSesion(workout);
-      await timerRef.current?.reset();
-      await clearDraft();
-      setNotes('');
-      dispatch({ type: 'RESET_EXERCISES' });
-      setCardio(null);
-      setSessionDate(fechaHoyLocal());
-      Alert.alert('¡Entrenamiento finalizado!', 'La sesión se guardó correctamente.');
-    } catch {
-      Alert.alert('No se pudo guardar', 'Comprueba la base de datos local.');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const handleFinishWorkout = useCallback(async () => {
+    await finishWorkout({
+      sessionActive,
+      getElapsedSeconds: () => timerRef.current?.getElapsedSeconds() ?? 0,
+      resetTimer: async () => {
+        await timerRef.current?.reset();
+      },
+    });
+  }, [finishWorkout, sessionActive]);
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
@@ -174,7 +54,11 @@ export default function WorkoutScreen() {
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <SessionTimerBanner ref={timerRef} onSessionActiveChange={handleSessionActiveChange} />
 
           <View style={styles.heading}>
@@ -182,11 +66,17 @@ export default function WorkoutScreen() {
             <Text style={styles.hint}>Planifica tu esfuerzo</Text>
           </View>
           <View style={styles.row}>
-            <Pressable style={[styles.week, week === 'carga' && styles.weekLoad]} onPress={() => selectWeek('carga')}>
+            <Pressable
+              style={[styles.week, week === 'carga' && styles.weekLoad]}
+              onPress={() => dispatch({ type: 'SET_METADATA', payload: { week: 'carga' } })}
+            >
               <TrendingUp color={week === 'carga' ? c.ink : c.muted} size={18} />
               <Text style={styles.weekText}>Carga</Text>
             </Pressable>
-            <Pressable style={[styles.week, week === 'descarga' && styles.weekDeload]} onPress={() => selectWeek('descarga')}>
+            <Pressable
+              style={[styles.week, week === 'descarga' && styles.weekDeload]}
+              onPress={() => dispatch({ type: 'SET_METADATA', payload: { week: 'descarga' } })}
+            >
               <TrendingDown color={week === 'descarga' ? c.ink : c.muted} size={18} />
               <Text style={styles.weekText}>Descarga</Text>
             </Pressable>
@@ -196,7 +86,7 @@ export default function WorkoutScreen() {
             <Text style={styles.label}>FECHA · AAAA-MM-DD</Text>
             <TextInput
               value={sessionDate}
-              onChangeText={setSessionDate}
+              onChangeText={(text) => dispatch({ type: 'SET_METADATA', payload: { date: text } })}
               placeholder="2026-10-02"
               keyboardType="numbers-and-punctuation"
               style={styles.input}
@@ -205,7 +95,7 @@ export default function WorkoutScreen() {
             <Text style={styles.label}>NOTAS (OPCIONAL)</Text>
             <TextInput
               value={notes}
-              onChangeText={setNotes}
+              onChangeText={(text) => dispatch({ type: 'SET_METADATA', payload: { notes: text } })}
               placeholder="Sensaciones, descanso o comentarios"
               multiline
               textAlignVertical="top"
@@ -213,7 +103,9 @@ export default function WorkoutScreen() {
               accessibilityLabel="Notas de la sesión"
             />
           </View>
-          <Text style={styles.hint}>Semana del año: {esFechaValida(sessionDate) ? getIsoWeekNumber(sessionDate) : '—'}</Text>
+          <Text style={styles.hint}>
+            Semana del año: {esFechaValida(sessionDate) ? getIsoWeekNumber(sessionDate) : '—'}
+          </Text>
 
           <View style={styles.heading}>
             <Text style={styles.headingText}>Ejercicios</Text>
@@ -225,18 +117,25 @@ export default function WorkoutScreen() {
                 <Text style={styles.number}>0{index + 1}</Text>
                 <TextInput
                   value={item.nombre}
-                  onChangeText={(value) => updateExercise(item.id, value)}
+                  onChangeText={(name) =>
+                    dispatch({ type: 'UPDATE_EXERCISE', payload: { exerciseId: item.id, name } })
+                  }
                   placeholder="Nombre del ejercicio"
                   placeholderTextColor="#9aa59d"
                   style={styles.exerciseInput}
                 />
-                <Pressable accessibilityLabel="Eliminar ejercicio" onPress={() => removeExercise(item.id)}>
+                <Pressable
+                  accessibilityLabel="Eliminar ejercicio"
+                  onPress={() => dispatch({ type: 'REMOVE_EXERCISE', payload: { exerciseId: item.id } })}
+                >
                   <X color={c.muted} size={19} />
                 </Pressable>
               </View>
               <TextInput
                 value={item.grupoMuscular ?? ''}
-                onChangeText={(value) => updateMuscleGroup(item.id, value)}
+                onChangeText={(muscleGroup) =>
+                  dispatch({ type: 'UPDATE_EXERCISE', payload: { exerciseId: item.id, muscleGroup } })
+                }
                 placeholder="Grupo muscular (p. ej. Pecho)"
                 placeholderTextColor="#9aa59d"
                 style={styles.input}
@@ -253,22 +152,53 @@ export default function WorkoutScreen() {
                   <Text style={styles.setNumber}>{setIndex + 1}</Text>
                   <TextInput
                     value={String(set.reps)}
-                    onChangeText={(value) => updateSet(item.id, set.id, 'reps', value)}
+                    onChangeText={(val) =>
+                      dispatch({
+                        type: 'UPDATE_SET',
+                        payload: {
+                          exerciseId: item.id,
+                          setId: set.id,
+                          field: 'reps',
+                          value: normalizarNumero(val),
+                        },
+                      })
+                    }
                     keyboardType="numeric"
                     style={styles.numberInput}
                   />
                   <TextInput
                     value={String(set.pesoKg)}
-                    onChangeText={(value) => updateSet(item.id, set.id, 'pesoKg', value)}
+                    onChangeText={(val) =>
+                      dispatch({
+                        type: 'UPDATE_SET',
+                        payload: {
+                          exerciseId: item.id,
+                          setId: set.id,
+                          field: 'pesoKg',
+                          value: normalizarNumero(val),
+                        },
+                      })
+                    }
                     keyboardType="decimal-pad"
                     style={styles.numberInput}
                   />
-                  <Pressable accessibilityLabel="Eliminar serie" onPress={() => removeSet(item.id, set.id)}>
+                  <Pressable
+                    accessibilityLabel="Eliminar serie"
+                    onPress={() =>
+                      dispatch({
+                        type: 'REMOVE_SET',
+                        payload: { exerciseId: item.id, setId: set.id },
+                      })
+                    }
+                  >
                     <Minus color={c.muted} size={17} />
                   </Pressable>
                 </View>
               ))}
-              <Pressable style={styles.addSet} onPress={() => addSet(item.id)}>
+              <Pressable
+                style={styles.addSet}
+                onPress={() => dispatch({ type: 'ADD_SET', payload: { exerciseId: item.id } })}
+              >
                 <CirclePlus color={c.green} size={17} />
                 <Text style={styles.addSetText}>Añadir serie</Text>
               </Pressable>
@@ -289,7 +219,10 @@ export default function WorkoutScreen() {
               <Switch
                 value={cardio !== null}
                 onValueChange={(enabled) =>
-                  setCardio(enabled ? { realizado: true, modalidad: 'Trotar', tiempoMin: 20 } : null)
+                  dispatch({
+                    type: 'SET_CARDIO',
+                    payload: enabled ? { realizado: true, modalidad: 'Trotar', tiempoMin: 20 } : null,
+                  })
                 }
                 trackColor={{ false: '#d5ddd6', true: c.orange }}
                 thumbColor={c.white}
@@ -303,7 +236,12 @@ export default function WorkoutScreen() {
                     <Pressable
                       key={mode}
                       style={[styles.chip, cardio.modalidad === mode && styles.chipActive]}
-                      onPress={() => setCardio({ ...cardio, modalidad: mode })}
+                      onPress={() =>
+                        dispatch({
+                          type: 'SET_CARDIO',
+                          payload: { ...cardio, modalidad: mode },
+                        })
+                      }
                     >
                       <Text style={styles.chipText}>{mode}</Text>
                     </Pressable>
@@ -314,7 +252,12 @@ export default function WorkoutScreen() {
                     <Text style={styles.label}>MINUTOS</Text>
                     <TextInput
                       value={String(cardio.tiempoMin)}
-                      onChangeText={(value) => setCardio({ ...cardio, tiempoMin: normalizarNumero(value) })}
+                      onChangeText={(value) =>
+                        dispatch({
+                          type: 'SET_CARDIO',
+                          payload: { ...cardio, tiempoMin: normalizarNumero(value) },
+                        })
+                      }
                       keyboardType="numeric"
                       style={styles.input}
                     />
@@ -323,7 +266,12 @@ export default function WorkoutScreen() {
                     <Text style={styles.label}>DISTANCIA KM</Text>
                     <TextInput
                       value={String(cardio.distanciaKm ?? 0)}
-                      onChangeText={(value) => setCardio({ ...cardio, distanciaKm: normalizarNumero(value) })}
+                      onChangeText={(value) =>
+                        dispatch({
+                          type: 'SET_CARDIO',
+                          payload: { ...cardio, distanciaKm: normalizarNumero(value) },
+                        })
+                      }
                       keyboardType="decimal-pad"
                       style={styles.input}
                     />
@@ -337,10 +285,14 @@ export default function WorkoutScreen() {
             accessibilityRole="button"
             style={[styles.save, styles.finish, (!sessionActive || loading) && styles.disabled]}
             disabled={!sessionActive || loading}
-            onPress={finishWorkout}
+            onPress={() => {
+              void handleFinishWorkout();
+            }}
           >
             <Save color={c.white} size={19} />
-            <Text style={[styles.saveText, styles.finishText]}>{loading ? 'Guardando...' : 'Finalizar entrenamiento'}</Text>
+            <Text style={[styles.saveText, styles.finishText]}>
+              {loading ? 'Guardando...' : 'Finalizar entrenamiento'}
+            </Text>
           </Pressable>
         </ScrollView>
       </SafeAreaView>

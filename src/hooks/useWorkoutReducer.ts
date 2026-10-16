@@ -1,5 +1,6 @@
 import { useReducer } from 'react';
-import type { Ejercicio, Serie } from '../../types';
+import type { WorkoutDraft } from '../storage/workoutDraft';
+import type { Cardio, Ejercicio, Serie } from '../../types';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -16,28 +17,38 @@ export const createEjercicio = (): Ejercicio => ({
   series: [createSerie()],
 });
 
+export const fechaHoyLocal = (): string => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
+
 export interface WorkoutState {
+  week: 'carga' | 'descarga';
+  sessionDate: string;
+  notes: string;
   exercises: Ejercicio[];
+  cardio: Cardio | null;
 }
+
+export const createInitialWorkoutState = (): WorkoutState => ({
+  week: 'carga',
+  sessionDate: fechaHoyLocal(),
+  notes: '',
+  exercises: [createEjercicio()],
+  cardio: null,
+});
 
 export type WorkoutAction =
   | { type: 'ADD_EXERCISE' }
-  | {
-      type: 'UPDATE_SET';
-      payload: {
-        exerciseId: string;
-        setId: string;
-        field: 'reps' | 'pesoKg';
-        value: number;
-      };
-    }
+  | { type: 'UPDATE_EXERCISE'; payload: { exerciseId: string; name?: string; muscleGroup?: string } }
   | { type: 'REMOVE_EXERCISE'; payload: { exerciseId: string } }
   | { type: 'ADD_SET'; payload: { exerciseId: string } }
+  | { type: 'UPDATE_SET'; payload: { exerciseId: string; setId: string; field: 'reps' | 'pesoKg'; value: number } }
   | { type: 'REMOVE_SET'; payload: { exerciseId: string; setId: string } }
-  | { type: 'UPDATE_EXERCISE_NAME'; payload: { exerciseId: string; name: string } }
-  | { type: 'UPDATE_MUSCLE_GROUP'; payload: { exerciseId: string; muscleGroup: string } }
-  | { type: 'SET_EXERCISES'; payload: Ejercicio[] }
-  | { type: 'RESET_EXERCISES' };
+  | { type: 'SET_CARDIO'; payload: Cardio | null }
+  | { type: 'SET_METADATA'; payload: { week?: 'carga' | 'descarga'; date?: string; notes?: string } }
+  | { type: 'HYDRATE_DRAFT'; payload: WorkoutDraft }
+  | { type: 'RESET' };
 
 export function workoutReducer(state: WorkoutState, action: WorkoutAction): WorkoutState {
   switch (action.type) {
@@ -45,6 +56,19 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
       return {
         ...state,
         exercises: [...state.exercises, createEjercicio()],
+      };
+
+    case 'UPDATE_EXERCISE':
+      return {
+        ...state,
+        exercises: state.exercises.map((exercise) => {
+          if (exercise.id !== action.payload.exerciseId) return exercise;
+          return {
+            ...exercise,
+            ...(action.payload.name !== undefined ? { nombre: action.payload.name } : {}),
+            ...(action.payload.muscleGroup !== undefined ? { grupoMuscular: action.payload.muscleGroup } : {}),
+          };
+        }),
       };
 
     case 'REMOVE_EXERCISE':
@@ -56,26 +80,6 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
             : state.exercises,
       };
 
-    case 'UPDATE_EXERCISE_NAME':
-      return {
-        ...state,
-        exercises: state.exercises.map((exercise) =>
-          exercise.id === action.payload.exerciseId
-            ? { ...exercise, nombre: action.payload.name }
-            : exercise,
-        ),
-      };
-
-    case 'UPDATE_MUSCLE_GROUP':
-      return {
-        ...state,
-        exercises: state.exercises.map((exercise) =>
-          exercise.id === action.payload.exerciseId
-            ? { ...exercise, grupoMuscular: action.payload.muscleGroup }
-            : exercise,
-        ),
-      };
-
     case 'ADD_SET':
       return {
         ...state,
@@ -84,6 +88,22 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
             ? { ...exercise, series: [...exercise.series, createSerie()] }
             : exercise,
         ),
+      };
+
+    case 'UPDATE_SET':
+      return {
+        ...state,
+        exercises: state.exercises.map((exercise) => {
+          if (exercise.id !== action.payload.exerciseId) return exercise;
+          return {
+            ...exercise,
+            series: exercise.series.map((set) =>
+              set.id === action.payload.setId
+                ? { ...set, [action.payload.field]: action.payload.value }
+                : set,
+            ),
+          };
+        }),
       };
 
     case 'REMOVE_SET':
@@ -100,49 +120,41 @@ export function workoutReducer(state: WorkoutState, action: WorkoutAction): Work
         }),
       };
 
-    case 'UPDATE_SET':
+    case 'SET_CARDIO':
       return {
         ...state,
-        exercises: state.exercises.map((exercise) => {
-          if (exercise.id !== action.payload.exerciseId) {
-            return exercise;
-          }
-          return {
-            ...exercise,
-            series: exercise.series.map((set) =>
-              set.id === action.payload.setId
-                ? { ...set, [action.payload.field]: action.payload.value }
-                : set,
-            ),
-          };
-        }),
+        cardio: action.payload,
       };
 
-    case 'SET_EXERCISES':
+    case 'SET_METADATA':
       return {
         ...state,
-        exercises: action.payload,
+        ...(action.payload.week !== undefined ? { week: action.payload.week } : {}),
+        ...(action.payload.date !== undefined ? { sessionDate: action.payload.date } : {}),
+        ...(action.payload.notes !== undefined ? { notes: action.payload.notes } : {}),
       };
 
-    case 'RESET_EXERCISES':
+    case 'HYDRATE_DRAFT':
       return {
         ...state,
-        exercises: [createEjercicio()],
+        week: action.payload.week,
+        sessionDate: action.payload.sessionDate,
+        notes: action.payload.notes,
+        exercises:
+          action.payload.exercises && action.payload.exercises.length > 0
+            ? action.payload.exercises
+            : state.exercises,
+        cardio: action.payload.cardio,
       };
+
+    case 'RESET':
+      return createInitialWorkoutState();
 
     default:
       return state;
   }
 }
 
-export function useWorkoutReducer(initialExercises?: Ejercicio[]) {
-  const [state, dispatch] = useReducer(workoutReducer, {
-    exercises: initialExercises && initialExercises.length > 0 ? initialExercises : [createEjercicio()],
-  });
-
-  return {
-    state,
-    exercises: state.exercises,
-    dispatch,
-  };
+export function useWorkoutReducer(initialState: WorkoutState = createInitialWorkoutState()) {
+  return useReducer(workoutReducer, initialState);
 }
