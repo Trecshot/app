@@ -23,7 +23,10 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-router",
+      "expo-status-bar",
+      "expo-splash-screen"
     ],
     "extra": {
       "eas": {
