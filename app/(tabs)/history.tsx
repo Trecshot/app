@@ -1,10 +1,8 @@
+import { FlashList, type ListRenderItemInfo } from '@shopify/flash-list';
 import { Dumbbell, History as HistoryIcon } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import {
   Alert,
-  FlatList,
-  type ListRenderItemInfo,
-  Platform,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -79,7 +77,7 @@ export default function HistoryScreen() {
     [expandedWorkoutId, details, detailsLoadingId, toggleWorkoutDetails, confirmDeleteWorkout],
   );
 
-  const keyExtractor = useCallback((item: SesionEntrenamiento) => item.id, []);
+  const keyExtractor = useCallback((item: SesionEntrenamiento) => item.id.toString(), []);
 
   const ListHeader = useCallback(
     () => {
@@ -150,25 +148,24 @@ export default function HistoryScreen() {
         </View>
       </View>
 
-      <FlatList
-        data={history as SesionEntrenamiento[]}
-        renderItem={renderWorkoutItem}
-        keyExtractor={keyExtractor}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        initialNumToRender={8}
-        maxToRenderPerBatch={10}
-        windowSize={5}
-        removeClippedSubviews={Platform.OS === 'android'}
-      />
+      <View style={styles.container}>
+        <FlashList
+          data={history}
+          renderItem={renderWorkoutItem}
+          keyExtractor={keyExtractor}
+          ListHeaderComponent={ListHeader}
+          ListEmptyComponent={ListEmpty}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F3F4F6' },
+  container: { flex: 1 },
   header: {
     paddingHorizontal: 22,
     paddingTop: 18,

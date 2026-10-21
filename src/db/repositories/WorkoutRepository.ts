@@ -10,11 +10,13 @@ import {
 } from '../../../database';
 import type { SesionEntrenamiento, WeeklySummary, WorkoutDetails } from '../../../types';
 
-export interface SetLogInput {
+export interface SetRecord {
   exerciseName: string;
   weightKg: number;
   reps: number;
 }
+
+export type SetLogInput = SetRecord;
 
 export class WorkoutRepository {
   /**
@@ -44,13 +46,54 @@ export class WorkoutRepository {
   }
 
   /**
-   * Persiste la sesión completada y sus series granulares en una transacción ACID.
+   * Inserta la sesión principal y todas sus series vinculadas en una única transacción atómica (Batching).
+   * Si cualquier inserción falla, SQLite realiza rollback automático de toda la transacción.
+   */
+  static async saveFullWorkout(
+    startTime: number,
+    endTime: number,
+    duration: number,
+    sets: SetRecord[],
+  ): Promise<void> {
+    const db = await getDatabase();
+
+    await db.withTransactionAsync(async () => {
+      // 1. Insertar la sesión principal
+      const result = await db.runAsync(
+        'INSERT INTO session (start_time, end_time, total_duration_seconds) VALUES (?, ?, ?);',
+        [startTime, endTime, duration],
+      );
+      const sessionId = result.lastInsertRowId;
+
+      // 2. Iterar e insertar cada serie vinculada al sessionId dentro de la MISMA transacción
+      if (sets.length > 0) {
+        const statement = await db.prepareAsync(
+          'INSERT INTO set_log (session_id, exercise_name, weight_kg, reps) VALUES ($sessionId, $exerciseName, $weightKg, $reps);',
+        );
+        try {
+          for (const set of sets) {
+            await statement.executeAsync({
+              $sessionId: sessionId,
+              $exerciseName: set.exerciseName,
+              $weightKg: set.weightKg,
+              $reps: set.reps,
+            });
+          }
+        } finally {
+          await statement.finalizeAsync();
+        }
+      }
+    });
+  }
+
+  /**
+   * Persiste la sesión completada y retorna su ID.
    */
   static async saveCompletedSession(
     startTime: number,
     endTime: number,
     duration: number,
-    sets: SetLogInput[] = [],
+    sets: SetRecord[] = [],
   ): Promise<number> {
     const db = await getDatabase();
     let insertedSessionId = 0;
@@ -74,7 +117,7 @@ export class WorkoutRepository {
   }
 
   /**
-   * Guarda una sesión completa de entrenamiento junto con el registro relacional de sobrecarga.
+   * Guarda una sesión completa de entrenamiento junto con el registro por lotes de sobrecarga.
    */
   static async saveSession(
     sesion: SesionEntrenamiento,
@@ -84,7 +127,7 @@ export class WorkoutRepository {
 
     const endTime = Date.now();
     const startTime = startTimestamp ?? endTime - sesion.duracionSegundos * 1000;
-    const granularSets: SetLogInput[] = sesion.ejercicios.flatMap((exercise) =>
+    const granularSets: SetRecord[] = sesion.ejercicios.flatMap((exercise) =>
       exercise.series.map((set) => ({
         exerciseName: exercise.nombre,
         weightKg: set.pesoKg,
@@ -92,7 +135,7 @@ export class WorkoutRepository {
       })),
     );
 
-    await WorkoutRepository.saveCompletedSession(
+    await WorkoutRepository.saveFullWorkout(
       startTime,
       endTime,
       sesion.duracionSegundos,

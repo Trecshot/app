@@ -5,18 +5,9 @@ import { useSessionStore } from '../store/useSessionStore';
 
 const KEEP_AWAKE_TAG = 'workout-session';
 
-export const formatTime = (totalSecs: number): string => {
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  return `${pad(Math.floor(totalSecs / 3600))}:${pad(Math.floor((totalSecs % 3600) / 60))}:${pad(totalSecs % 60)}`;
-};
-
 export const useWorkoutTimer = (): number => {
-  const { startTimestamp, isActive, isRunning, accumulatedMs, hydrateSession } = useSessionStore();
+  const { startTimestamp, isActive, isRunning, accumulatedMs } = useSessionStore();
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-
-  useEffect(() => {
-    void hydrateSession();
-  }, [hydrateSession]);
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | undefined;

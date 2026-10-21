@@ -1,9 +1,9 @@
 import { AlarmClock, RotateCcw } from 'lucide-react-native';
 import { memo, useEffect, useImperativeHandle, type Ref } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { formatTime, useWorkoutTimer } from '../../hooks/useWorkoutTimer';
 import { useSessionStore } from '../../store/useSessionStore';
 import { c } from '../../theme';
+import { TimerDisplay } from './TimerDisplay';
 
 export interface SessionTimerHandle {
   /** Total exacto en segundos, calculado desde las marcas de tiempo. */
@@ -19,30 +19,28 @@ interface SessionTimerBannerProps {
 }
 
 /**
- * El estado de los segundos vive aquí dentro: el tick de cada segundo solo
- * re-renderiza este banner, no la lista de ejercicios ni sus TextInput.
+ * El tick de 1Hz está aislado en el nodo hoja <TimerDisplay />, por lo que
+ * ni este banner ni la vista principal se re-renderizan cada segundo.
  */
 function SessionTimerBannerBase({ ref, onSessionActiveChange }: SessionTimerBannerProps) {
-  const elapsedSeconds = useWorkoutTimer();
-  const { isActive, isRunning, isHydrated, toggleSession, endSession } = useSessionStore();
-  const formattedTime = formatTime(elapsedSeconds);
+  const { isActive, isRunning, toggleSession, endSession, getElapsedSeconds } = useSessionStore();
 
   useImperativeHandle(
     ref,
     () => ({
-      getElapsedSeconds: () => elapsedSeconds,
+      getElapsedSeconds,
       reset: async () => {
         endSession();
       },
     }),
-    [elapsedSeconds, endSession],
+    [getElapsedSeconds, endSession],
   );
 
   useEffect(() => {
-    if (isHydrated && onSessionActiveChange) {
+    if (onSessionActiveChange) {
       onSessionActiveChange(isActive);
     }
-  }, [isHydrated, isActive, onSessionActiveChange]);
+  }, [isActive, onSessionActiveChange]);
 
   const status = isRunning ? 'EN CURSO' : isActive ? 'SESIÓN PAUSADA' : 'LISTO PARA EMPEZAR';
   const timerButtonStyle = isRunning ? styles.timerButtonActive : styles.timerButtonIdle;
@@ -57,11 +55,10 @@ function SessionTimerBannerBase({ ref, onSessionActiveChange }: SessionTimerBann
         </View>
         <AlarmClock color={c.lime} size={19} />
       </View>
-      <Text style={styles.timer}>{formattedTime}</Text>
+      <TimerDisplay />
       <View style={styles.row}>
         <Pressable
-          style={[styles.start, timerButtonStyle, !isHydrated && styles.disabled]}
-          disabled={!isHydrated}
+          style={[styles.start, timerButtonStyle]}
           onPress={toggleSession}
         >
           <Text style={styles.startText}>{timerActionText}</Text>
@@ -97,7 +94,6 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#748078' },
   dotOn: { backgroundColor: c.lime },
   liveText: { color: '#aab6ad', fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
-  timer: { color: c.white, fontSize: 46, fontWeight: '800', marginTop: 16, marginBottom: 18, fontVariant: ['tabular-nums'] },
   start: {
     flex: 1,
     height: 46,
@@ -111,5 +107,4 @@ const styles = StyleSheet.create({
   timerButtonActive: { backgroundColor: '#FDE047' },
   startText: { color: c.ink, fontWeight: '800', fontSize: 15 },
   reset: { width: 46, height: 46, borderWidth: 1, borderColor: '#526058', borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  disabled: { opacity: 0.6 },
 });
