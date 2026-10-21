@@ -3,40 +3,55 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { X, PlusCircle } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../theme';
 import { SetRow } from './SetRow';
+import { useWorkoutStore, WorkoutExercise } from '../../store/useWorkoutStore';
 
 interface ExerciseCardProps {
   exerciseIndex: string;
-  exerciseName: string;
-  muscleGroup: string;
+  exercise: WorkoutExercise;
 }
 
-export const ExerciseCard = ({ exerciseIndex, exerciseName, muscleGroup }: ExerciseCardProps) => {
+export const ExerciseCard = ({ exerciseIndex, exercise }: ExerciseCardProps) => {
+  const { addSet, removeSet, updateSet, toggleSetComplete, removeExercise } = useWorkoutStore();
+
   return (
     <View style={GLOBAL_STYLES.card}>
       <View style={styles.header}>
         <Text style={styles.indexText}>{exerciseIndex}</Text>
-        <Text style={styles.exerciseName}>{exerciseName}</Text>
-        <TouchableOpacity>
+        <Text style={styles.exerciseName}>{exercise.name}</Text>
+        {/* Botón para eliminar el ejercicio completo */}
+        <TouchableOpacity onPress={() => removeExercise(exercise.id)}>
           <X color={COLORS.textSecondary} size={20} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.muscleGroupContainer}>
-        <Text style={styles.muscleGroupText}>{muscleGroup}</Text>
+        <Text style={styles.muscleGroupText}>{exercise.muscleGroup}</Text>
       </View>
 
       <View style={styles.tableHeader}>
-        <Text style={[styles.columnLabel, { width: 40 }]}>SERIE</Text>
+        <Text style={[styles.columnLabel, { width: 40, textAlign: 'center' }]}>SERIE</Text>
         <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>REPS</Text>
         <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>PESO (KG)</Text>
-        {/* Espaciador para el botón eliminar */}
-        <View style={{ width: 30 }} />
+        {/* Espacio para botones OK y Eliminar */}
+        <View style={{ width: 70 }} />
       </View>
 
-      {/* Filas de ejemplo */}
-      <SetRow setNumber={1} reps="10" weight="0" />
+      {/* Dibuja las series de forma dinámica */}
+      {exercise.sets.map((set, index) => (
+        <SetRow 
+          key={set.id}
+          setNumber={index + 1} 
+          reps={set.reps} 
+          weight={set.weight} 
+          isCompleted={set.isCompleted}
+          onChangeReps={(val) => updateSet(exercise.id, set.id, 'reps', val)}
+          onChangeWeight={(val) => updateSet(exercise.id, set.id, 'weight', val)}
+          onToggleComplete={() => toggleSetComplete(exercise.id, set.id)}
+          onDelete={() => removeSet(exercise.id, set.id)}
+        />
+      ))}
       
-      <TouchableOpacity style={styles.addSetButton}>
+      <TouchableOpacity style={styles.addSetButton} onPress={() => addSet(exercise.id)}>
         <PlusCircle size={16} color={COLORS.primaryDark} />
         <Text style={styles.addSetText}>Añadir serie</Text>
       </TouchableOpacity>

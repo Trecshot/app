@@ -4,8 +4,11 @@ import { Settings, Maximize } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { TimerDisplay } from '../../src/components/workout/TimerDisplay';
 import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
+import { useWorkoutStore } from '../../src/store/useWorkoutStore';
 
 export default function ActiveWorkoutScreen() {
+  const { exercises, addExercise } = useWorkoutStore();
+
   return (
     <View style={GLOBAL_STYLES.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -26,23 +29,32 @@ export default function ActiveWorkoutScreen() {
         <View style={styles.timerCard}>
           <Text style={styles.timerLabel}>• LISTO PARA EMPEZAR</Text>
           <View style={styles.timerCenter}>
-            <TimerDisplay style={styles.timerText} />
+            <Text style={styles.timerText}><TimerDisplay /></Text>
           </View>
           <TouchableOpacity style={styles.startButton}>
             <Text style={styles.startButtonText}>▶ Comenzar</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Componentes de la Rutina */}
+        {/* Componentes de la Rutina (Vinculados a Zustand) */}
         <Text style={styles.sectionTitle}>Ejercicios</Text>
 
-        <ExerciseCard 
-          exerciseIndex="01" 
-          exerciseName="Nombre del ejercicio" 
-          muscleGroup="Grupo muscular (p. ej. Pecho)" 
-        />
+        {exercises.length === 0 ? (
+          <Text style={{ color: COLORS.textSecondary, marginBottom: SPACING.md, fontStyle: 'italic' }}>
+            Tu rutina está vacía. Añade un ejercicio para empezar.
+          </Text>
+        ) : (
+          exercises.map((exercise, index) => (
+            <ExerciseCard 
+              key={exercise.id}
+              exerciseIndex={`0${index + 1}`.slice(-2)} 
+              exercise={exercise} 
+            />
+          ))
+        )}
         
-        <TouchableOpacity style={styles.outlineButton}>
+        {/* Botón Funcional */}
+        <TouchableOpacity style={styles.outlineButton} onPress={addExercise}>
           <Text style={styles.outlineButtonText}>⊕ Añadir ejercicio</Text>
         </TouchableOpacity>
 

@@ -11,6 +11,7 @@ export const COLORS = {
   textSecondary: '#6B7280', // Gris para subtítulos y placeholders
   textInverted: '#FFFFFF', // Blanco para textos sobre fondos oscuros
   border: '#E5E7EB', // Líneas divisorias sutiles
+  danger: '#EF4444', // Rojo para acciones destructivas / eliminar
 };
 
 export const SPACING = {

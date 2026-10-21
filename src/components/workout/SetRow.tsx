@@ -1,38 +1,56 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { Minus } from 'lucide-react-native';
+import { Minus, Check } from 'lucide-react-native';
 import { COLORS, SPACING, GLOBAL_STYLES } from '../../theme';
 
 interface SetRowProps {
   setNumber: number;
-  reps?: string;
-  weight?: string;
-  onDelete?: () => void;
+  reps: string;
+  weight: string;
+  isCompleted: boolean;
+  onChangeReps: (val: string) => void;
+  onChangeWeight: (val: string) => void;
+  onToggleComplete: () => void;
+  onDelete: () => void;
 }
 
-export const SetRow = ({ setNumber, reps, weight, onDelete }: SetRowProps) => {
+export const SetRow = ({ setNumber, reps, weight, isCompleted, onChangeReps, onChangeWeight, onToggleComplete, onDelete }: SetRowProps) => {
   return (
-    <View style={styles.rowContainer}>
+    <View style={[styles.rowContainer, isCompleted && styles.rowCompleted]}>
       <Text style={styles.setNumber}>{setNumber}</Text>
       
       <View style={styles.inputContainer}>
         <TextInput 
-          style={[GLOBAL_STYLES.input, styles.inputBox]} 
+          style={[GLOBAL_STYLES.input, styles.inputBox, isCompleted && styles.inputCompleted]} 
           keyboardType="numeric" 
-          defaultValue={reps}
+          value={reps}
+          onChangeText={onChangeReps}
+          editable={!isCompleted} // Bloquea escritura si está marcado como OK
+          placeholder="0"
+          placeholderTextColor={COLORS.textSecondary}
         />
       </View>
 
       <View style={styles.inputContainer}>
         <TextInput 
-          style={[GLOBAL_STYLES.input, styles.inputBox]} 
+          style={[GLOBAL_STYLES.input, styles.inputBox, isCompleted && styles.inputCompleted]} 
           keyboardType="numeric" 
-          defaultValue={weight}
+          value={weight}
+          onChangeText={onChangeWeight}
+          editable={!isCompleted} 
+          placeholder="0"
+          placeholderTextColor={COLORS.textSecondary}
         />
       </View>
 
-      <TouchableOpacity onPress={onDelete} style={styles.deleteButton}>
-        <Minus size={20} color={COLORS.textSecondary} />
+      {/* Botón de Completado */}
+      <TouchableOpacity onPress={onToggleComplete} style={[styles.actionButton, isCompleted && styles.actionButtonActive]}>
+        <Check size={20} color={isCompleted ? COLORS.surface : COLORS.textSecondary} />
+      </TouchableOpacity>
+
+      {/* Botón de Eliminar */}
+      <TouchableOpacity onPress={onDelete} style={styles.actionButton}>
+        <Minus size={20} color={COLORS.danger} />
       </TouchableOpacity>
     </View>
   );
@@ -44,6 +62,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: SPACING.sm,
+    borderRadius: 8,
+    marginVertical: 2,
+    paddingHorizontal: SPACING.xs,
+  },
+  rowCompleted: {
+    backgroundColor: 'rgba(193, 225, 79, 0.2)', // Verde lima transparente al completar
   },
   setNumber: {
     color: COLORS.textPrimary,
@@ -60,8 +84,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
-  deleteButton: {
+  inputCompleted: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    color: COLORS.primaryDark,
+  },
+  actionButton: {
     padding: SPACING.xs,
-    marginLeft: SPACING.sm,
+    marginLeft: SPACING.xs,
+    borderRadius: 8,
+  },
+  actionButtonActive: {
+    backgroundColor: COLORS.primary,
   }
 });
