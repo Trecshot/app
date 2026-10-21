@@ -10,16 +10,13 @@ interface TimerDisplayProps {
 export const TimerDisplay = ({ style }: TimerDisplayProps) => {
   const elapsedSeconds = useWorkoutTimer();
 
-  // Formateo estandarizado HH:MM:SS o MM:SS
+  // Formateo estandarizado HH:MM:SS
   const formatTime = (totalSeconds: number) => {
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
 
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
   return <Text style={[styles.timerText, style]}>{formatTime(elapsedSeconds)}</Text>;
@@ -27,9 +24,9 @@ export const TimerDisplay = ({ style }: TimerDisplayProps) => {
 
 const styles = StyleSheet.create({
   timerText: {
-    color: COLORS.textPrimary,
-    fontSize: 24,
-    fontWeight: 'bold',
-    fontVariant: ['tabular-nums'], // Evita el salto horizontal de los números
+    color: COLORS.textInverted,
+    fontSize: 48,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
 });

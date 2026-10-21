@@ -1,39 +1,38 @@
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
-import { Check } from 'lucide-react-native';
+import { Minus } from 'lucide-react-native';
 import { COLORS, SPACING, GLOBAL_STYLES } from '../../theme';
 
 interface SetRowProps {
   setNumber: number;
-  previousRecord: string;
-  isCompleted: boolean;
-  onToggleComplete?: () => void;
+  reps?: string;
+  weight?: string;
+  onDelete?: () => void;
 }
 
-export const SetRow = ({ setNumber, previousRecord, isCompleted, onToggleComplete }: SetRowProps) => {
+export const SetRow = ({ setNumber, reps, weight, onDelete }: SetRowProps) => {
   return (
-    <View style={[styles.rowContainer, isCompleted && styles.rowCompleted]}>
+    <View style={styles.rowContainer}>
       <Text style={styles.setNumber}>{setNumber}</Text>
-      <Text style={styles.previousText}>{previousRecord}</Text>
       
-      <TextInput 
-        style={GLOBAL_STYLES.input} 
-        keyboardType="numeric" 
-        placeholder="KG" 
-        placeholderTextColor={COLORS.textSecondary}
-      />
-      <TextInput 
-        style={GLOBAL_STYLES.input} 
-        keyboardType="numeric" 
-        placeholder="Reps" 
-        placeholderTextColor={COLORS.textSecondary}
-      />
+      <View style={styles.inputContainer}>
+        <TextInput 
+          style={[GLOBAL_STYLES.input, styles.inputBox]} 
+          keyboardType="numeric" 
+          defaultValue={reps}
+        />
+      </View>
 
-      <TouchableOpacity 
-        style={[styles.checkButton, isCompleted && styles.checkButtonActive]}
-        onPress={onToggleComplete}
-      >
-        <Check size={20} color={isCompleted ? COLORS.background : COLORS.textSecondary} />
+      <View style={styles.inputContainer}>
+        <TextInput 
+          style={[GLOBAL_STYLES.input, styles.inputBox]} 
+          keyboardType="numeric" 
+          defaultValue={weight}
+        />
+      </View>
+
+      <TouchableOpacity onPress={onDelete} style={styles.deleteButton}>
+        <Minus size={20} color={COLORS.textSecondary} />
       </TouchableOpacity>
     </View>
   );
@@ -45,30 +44,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: SPACING.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  rowCompleted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)', // Feedback visual sutil cuando se marca la serie
   },
   setNumber: {
     color: COLORS.textPrimary,
-    fontWeight: 'bold',
-    width: 24,
-  },
-  previousText: {
-    color: COLORS.textSecondary,
-    flex: 1,
-    fontSize: 12,
+    fontWeight: '600',
+    fontSize: 16,
+    width: 30,
     textAlign: 'center',
   },
-  checkButton: {
-    backgroundColor: COLORS.surfaceHighlight,
+  inputContainer: {
+    flex: 1,
+    paddingHorizontal: SPACING.xs,
+  },
+  inputBox: {
+    paddingVertical: 8,
     borderRadius: 8,
+  },
+  deleteButton: {
     padding: SPACING.xs,
     marginLeft: SPACING.sm,
-  },
-  checkButtonActive: {
-    backgroundColor: COLORS.success,
   }
 });

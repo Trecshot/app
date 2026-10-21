@@ -1,15 +1,16 @@
 import { StyleSheet } from 'react-native';
 
 export const COLORS = {
-  background: '#121212',
-  surface: '#1E1E1E',
-  surfaceHighlight: '#2C2C2E',
-  primary: '#3B82F6', // Azul de acción
-  success: '#10B981', // Verde esmeralda para completado
-  danger: '#EF4444',
-  textPrimary: '#FFFFFF',
-  textSecondary: '#A1A1AA',
-  border: '#333333',
+  background: '#F9FAFB', // Fondo gris muy claro de la app
+  surface: '#FFFFFF', // Fondo blanco de las tarjetas
+  surfaceHighlight: '#F3F4F6', // Fondo de inputs
+  timerSurface: '#18271E', // Verde oscuro casi negro para la tarjeta del reloj
+  primary: '#C1E14F', // Verde lima vibrante (Comenzar, Añadir Serie)
+  primaryDark: '#8F9B7A', // Verde salvia/oliva (Finalizar entrenamiento)
+  textPrimary: '#111827', // Negro/Gris oscuro para títulos
+  textSecondary: '#6B7280', // Gris para subtítulos y placeholders
+  textInverted: '#FFFFFF', // Blanco para textos sobre fondos oscuros
+  border: '#E5E7EB', // Líneas divisorias sutiles
 };
 
 export const SPACING = {
@@ -27,16 +28,19 @@ export const GLOBAL_STYLES = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: 16, // Bordes más redondeados según tu diseño original
     padding: SPACING.md,
     marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2, // Sombra suave en Android
   },
   title: {
     color: COLORS.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
   },
   subtitle: {
     color: COLORS.textSecondary,
@@ -47,17 +51,19 @@ export const GLOBAL_STYLES = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 18,
     fontWeight: '600',
-    fontVariant: ['tabular-nums'], // Evita el salto horizontal al cambiar números (crítico para cronómetros y cargas)
+    fontVariant: ['tabular-nums'],
   },
   input: {
-    backgroundColor: COLORS.surfaceHighlight,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderWidth: 1,
     color: COLORS.textPrimary,
     borderRadius: 8,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    fontSize: 18,
+    paddingVertical: SPACING.sm,
+    fontSize: 16,
     textAlign: 'center',
-    minWidth: 60,
+    fontWeight: '600',
   },
 });
 
