@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, type StyleProp, type TextStyle } from 'react-native';
 import { useWorkoutTimer } from '../../hooks/useWorkoutTimer';
-import { c } from '../../theme';
+import { COLORS } from '../../theme';
 
 interface TimerDisplayProps {
   style?: StyleProp<TextStyle>;
@@ -27,11 +27,9 @@ export const TimerDisplay = ({ style }: TimerDisplayProps) => {
 
 const styles = StyleSheet.create({
   timerText: {
-    color: c.white,
-    fontSize: 46,
-    fontWeight: '800',
-    marginTop: 16,
-    marginBottom: 18,
+    color: COLORS.textPrimary,
+    fontSize: 24,
+    fontWeight: 'bold',
     fontVariant: ['tabular-nums'], // Evita el salto horizontal de los números
   },
 });
