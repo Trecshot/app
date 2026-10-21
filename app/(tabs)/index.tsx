@@ -13,8 +13,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { getIsoWeekNumber } from '../../database';
-import { SessionTimerBanner, type SessionTimerHandle } from '../../src/components/SessionTimerBanner';
+import { SessionTimerBanner, type SessionTimerHandle } from '../../src/components/workout/SessionTimerBanner';
+import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import {
   createEmptyExercise,
   createEmptySet,
@@ -135,7 +135,7 @@ export default function WorkoutScreen() {
             />
           </View>
           <Text style={styles.hint}>
-            Semana del año: {esFechaValida(sessionDate) ? getIsoWeekNumber(sessionDate) : '—'}
+            Semana del año: {esFechaValida(sessionDate) ? WorkoutRepository.getIsoWeekNumber(sessionDate) : '—'}
           </Text>
 
           <View style={styles.heading}>

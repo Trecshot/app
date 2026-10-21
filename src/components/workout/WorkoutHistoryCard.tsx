@@ -1,8 +1,8 @@
 import { Activity, Dumbbell, Trash2 } from 'lucide-react-native';
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { c } from '../theme';
-import type { SesionEntrenamiento, WorkoutDetails } from '../../types';
+import { c } from '../../theme';
+import type { SesionEntrenamiento, WorkoutDetails } from '../../../types';
 
 export interface WorkoutHistoryCardProps {
   workout: SesionEntrenamiento;

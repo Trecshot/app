@@ -3,7 +3,8 @@ import { useReducer, useEffect, useRef, useState, useCallback } from 'react';
 import { Alert, AppState } from 'react-native';
 import { workoutReducer, type WorkoutState } from './useWorkoutReducer';
 import { loadDraft, saveDraft, clearDraft } from '../storage/workoutDraft';
-import { getIsoWeekNumber, guardarSesion } from '../../database';
+import { WorkoutRepository } from '../db/repositories/WorkoutRepository';
+import { useSessionStore } from '../store/useSessionStore';
 import type { Ejercicio, Serie, SesionEntrenamiento } from '../../types';
 
 // Utilidades estáticas
@@ -102,13 +103,15 @@ export function useWorkoutSession() {
         ...(state.notes.trim() ? { notas: state.notes.trim() } : {}),
         duracionSegundos: timerElapsedSeconds,
         tipoSemana: state.week,
-        cycleWeek: getIsoWeekNumber(state.sessionDate),
+        cycleWeek: WorkoutRepository.getIsoWeekNumber(state.sessionDate),
         ejercicios: validExercises,
         cardio: state.cardio,
       };
 
       try {
-        await guardarSesion(workout);
+        const startTimestamp = useSessionStore.getState().startTimestamp;
+        await WorkoutRepository.saveSession(workout, startTimestamp);
+        useSessionStore.getState().endSession();
         resetSession();
         Alert.alert('¡Entrenamiento finalizado!', 'La sesión se guardó correctamente.');
         return true;

@@ -10,8 +10,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import { getWorkoutDetails } from '../../database';
-import { WorkoutHistoryCard } from '../../src/components/WorkoutHistoryCard';
+import { WorkoutHistoryCard } from '../../src/components/workout/WorkoutHistoryCard';
+import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 import { c } from '../../src/theme';
 import type { SesionEntrenamiento, WorkoutDetails } from '../../types';
@@ -40,7 +40,7 @@ export default function HistoryScreen() {
       setDetails(null);
       setDetailsLoadingId(workoutId);
       try {
-        const workoutDetails = await getWorkoutDetails(workoutId);
+        const workoutDetails = await WorkoutRepository.getDetails(workoutId);
         setDetails({ workoutId, data: workoutDetails });
       } finally {
         setDetailsLoadingId((current) => (current === workoutId ? null : current));

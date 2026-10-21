@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
-import { eliminarSesion, getWeeklySummary, initDatabase, obtenerSesiones } from '../../database';
+import { WorkoutRepository } from '../db/repositories/WorkoutRepository';
 import type { SesionEntrenamiento, WeeklySummary } from '../../types';
 
 export interface UseWorkoutHistoryResult {
@@ -18,10 +18,10 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
 
   const fetchHistoryData = useCallback(async () => {
     try {
-      await initDatabase();
+      await WorkoutRepository.initSchema();
       const [sessions, summary] = await Promise.all([
-        obtenerSesiones(),
-        getWeeklySummary(),
+        WorkoutRepository.getSessions(),
+        WorkoutRepository.getWeeklySummary(),
       ]);
       setHistory(sessions);
       setWeeklySummary(summary);
@@ -39,9 +39,9 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
 
   const deleteWorkout = useCallback(async (workoutId: string) => {
     try {
-      await eliminarSesion(workoutId);
+      await WorkoutRepository.deleteSession(workoutId);
       setHistory((items) => items.filter((item) => item.id !== workoutId));
-      setWeeklySummary(await getWeeklySummary());
+      setWeeklySummary(await WorkoutRepository.getWeeklySummary());
     } catch {
       Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo.');
     }
@@ -51,10 +51,10 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
     let cancelled = false;
     async function load() {
       try {
-        await initDatabase();
+        await WorkoutRepository.initSchema();
         const [sessions, summary] = await Promise.all([
-          obtenerSesiones(),
-          getWeeklySummary(),
+          WorkoutRepository.getSessions(),
+          WorkoutRepository.getWeeklySummary(),
         ]);
         if (!cancelled) {
           setHistory(sessions);

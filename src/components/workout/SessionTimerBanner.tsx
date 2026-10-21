@@ -1,8 +1,9 @@
 import { AlarmClock, RotateCcw } from 'lucide-react-native';
 import { memo, useEffect, useImperativeHandle, type Ref } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useWorkoutTimer } from '../hooks/useWorkoutTimer';
-import { c } from '../theme';
+import { formatTime, useWorkoutTimer } from '../../hooks/useWorkoutTimer';
+import { useSessionStore } from '../../store/useSessionStore';
+import { c } from '../../theme';
 
 export interface SessionTimerHandle {
   /** Total exacto en segundos, calculado desde las marcas de tiempo. */
@@ -14,7 +15,7 @@ export interface SessionTimerHandle {
 interface SessionTimerBannerProps {
   ref?: Ref<SessionTimerHandle>;
   /** Solo se dispara al comenzar/finalizar/reiniciar, nunca por cada tick. */
-  onSessionActiveChange: (active: boolean) => void;
+  onSessionActiveChange?: (active: boolean) => void;
 }
 
 /**
@@ -22,15 +23,30 @@ interface SessionTimerBannerProps {
  * re-renderiza este banner, no la lista de ejercicios ni sus TextInput.
  */
 function SessionTimerBannerBase({ ref, onSessionActiveChange }: SessionTimerBannerProps) {
-  const { formattedTime, isRunning, sessionActive, isHydrated, toggle, reset, getElapsedSeconds } = useWorkoutTimer();
+  const elapsedSeconds = useWorkoutTimer();
+  const { isActive, isRunning, isHydrated, toggleSession, endSession } = useSessionStore();
+  const formattedTime = formatTime(elapsedSeconds);
 
-  useImperativeHandle(ref, () => ({ getElapsedSeconds, reset }), [getElapsedSeconds, reset]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      getElapsedSeconds: () => elapsedSeconds,
+      reset: async () => {
+        endSession();
+      },
+    }),
+    [elapsedSeconds, endSession],
+  );
 
-  useEffect(() => { if (isHydrated) onSessionActiveChange(sessionActive); }, [isHydrated, sessionActive, onSessionActiveChange]);
+  useEffect(() => {
+    if (isHydrated && onSessionActiveChange) {
+      onSessionActiveChange(isActive);
+    }
+  }, [isHydrated, isActive, onSessionActiveChange]);
 
-  const status = isRunning ? 'EN CURSO' : sessionActive ? 'SESIÓN PAUSADA' : 'LISTO PARA EMPEZAR';
+  const status = isRunning ? 'EN CURSO' : isActive ? 'SESIÓN PAUSADA' : 'LISTO PARA EMPEZAR';
   const timerButtonStyle = isRunning ? styles.timerButtonActive : styles.timerButtonIdle;
-  const timerActionText = isRunning ? '⏸ Pausar' : sessionActive ? '▶ Reanudar' : '▶ Comenzar';
+  const timerActionText = isRunning ? '⏸ Pausar' : isActive ? '▶ Reanudar' : '▶ Comenzar';
 
   return (
     <View style={styles.card}>
@@ -46,11 +62,15 @@ function SessionTimerBannerBase({ ref, onSessionActiveChange }: SessionTimerBann
         <Pressable
           style={[styles.start, timerButtonStyle, !isHydrated && styles.disabled]}
           disabled={!isHydrated}
-          onPress={() => { void toggle(); }}
+          onPress={toggleSession}
         >
           <Text style={styles.startText}>{timerActionText}</Text>
         </Pressable>
-        <Pressable accessibilityLabel="Reiniciar cronómetro" style={styles.reset} onPress={() => { void reset(); }}>
+        <Pressable
+          accessibilityLabel="Reiniciar cronómetro"
+          style={styles.reset}
+          onPress={endSession}
+        >
           <RotateCcw color={c.white} size={18} />
         </Pressable>
       </View>

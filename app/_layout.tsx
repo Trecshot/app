@@ -4,7 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { initDatabase } from '../database';
+import { WorkoutRepository } from '../src/db/repositories/WorkoutRepository';
 
 // Retener la pantalla de inicio del sistema operativo hasta que la base de datos se inicialice
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -16,7 +16,7 @@ export default function RootLayout() {
     async function prepare() {
       try {
         // Inicialización temprana de la base de datos y migraciones seguras
-        await initDatabase();
+        await WorkoutRepository.initSchema();
       } catch (error) {
         console.error('Error al inicializar la base de datos:', error);
       } finally {
