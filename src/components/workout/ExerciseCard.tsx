@@ -29,7 +29,8 @@ export const ExerciseCard = ({ exerciseIndex, exerciseName, muscleGroup }: Exerc
         <Text style={[styles.columnLabel, { width: 40 }]}>SERIE</Text>
         <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>REPS</Text>
         <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>PESO (KG)</Text>
-        <View style={{ width: 30 }} /> {/* Espaciador para el botón eliminar */}
+        {/* Espaciador para el botón eliminar */}
+        <View style={{ width: 30 }} />
       </View>
 
       {/* Filas de ejemplo */}

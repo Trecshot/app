@@ -1,131 +1,131 @@
-import { Activity, Dumbbell, Trash2 } from 'lucide-react-native';
-import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { c } from '../../theme';
-import type { SesionEntrenamiento, WorkoutDetails } from '../../../types';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Clock, Dumbbell, Trophy, ChevronRight } from 'lucide-react-native';
+import { COLORS, GLOBAL_STYLES, SPACING } from '../../theme';
 
-export interface WorkoutHistoryCardProps {
-  workout: SesionEntrenamiento;
-  expanded: boolean;
-  details: WorkoutDetails | null;
-  loadingDetails: boolean;
-  onToggle: (workoutId: string) => void;
-  onDelete: (workoutId: string) => void;
+interface WorkoutHistoryCardProps {
+  title: string;
+  date: string;
+  duration: string;
+  volume: string;
+  prs: number;
+  exercises: string[];
 }
 
-function WorkoutHistoryCardBase({
-  workout,
-  expanded,
-  details,
-  loadingDetails,
-  onToggle,
-  onDelete,
-}: WorkoutHistoryCardProps) {
+export const WorkoutHistoryCard = ({ title, date, duration, volume, prs, exercises }: WorkoutHistoryCardProps) => {
   return (
-    <View style={styles.historyCard}>
-      <View style={[styles.rowBetween, detailStyles.header]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          style={detailStyles.toggle}
-          onPress={() => onToggle(workout.id)}
-        >
-          <Text style={styles.date}>{workout.fecha}</Text>
-          <Text style={styles.meta}>
-            {workout.tipoSemana === 'carga' ? 'Semana de carga' : 'Semana de descarga'} ·{' '}
-            {Math.floor(workout.duracionSegundos / 60)} min
-          </Text>
-          <Text style={styles.meta}>Semana del año: {workout.cycleWeek ?? 1}</Text>
-          {workout.notas ? <Text style={styles.meta}>Notas: {workout.notas}</Text> : null}
-          <Text style={detailStyles.toggleLabel}>{expanded ? 'Ocultar detalles' : 'Ver ejercicios y cardio'}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Eliminar sesión"
-          onPress={() => onDelete(workout.id)}
-        >
-          <Trash2 color={c.red} size={18} />
-        </Pressable>
-      </View>
-      {expanded && (
-        <View style={detailStyles.body}>
-          {loadingDetails ? (
-            <Text style={styles.emptyText}>Cargando detalles...</Text>
-          ) : !details || (details.exercises.length === 0 && details.cardio.length === 0) ? (
-            <Text style={styles.emptyText}>Esta sesión no tiene ejercicios ni cardio registrados.</Text>
-          ) : (
-            <>
-              {details.exercises.map((set, index) => (
-                <View
-                  style={detailStyles.entry}
-                  key={`${set.exerciseId ?? set.exerciseName}-${set.setNumber}-${index}`}
-                >
-                  <View style={styles.live}>
-                    <Dumbbell color={c.green} size={14} />
-                    <Text style={detailStyles.exerciseName}>
-                      {set.exerciseName} · {set.muscleGroup}
-                    </Text>
-                  </View>
-                  <Text style={detailStyles.detailText}>
-                    Serie {set.setNumber} · {set.reps} reps · {set.weight} kg
-                  </Text>
-                </View>
-              ))}
-              {details.cardio.map((cardio, index) => (
-                <View style={detailStyles.entry} key={`${cardio.cardioType}-${index}`}>
-                  <View style={styles.live}>
-                    <Activity color={c.orange} size={14} />
-                    <Text style={detailStyles.exerciseName}>Cardio · {cardio.cardioType}</Text>
-                  </View>
-                  <Text style={detailStyles.detailText}>
-                    {cardio.durationMinutes} min
-                    {cardio.distanceKm !== undefined ? ` · ${cardio.distanceKm} km` : ''}
-                    {cardio.level !== undefined ? ` · Nivel ${cardio.level}` : ''}
-                  </Text>
-                </View>
-              ))}
-            </>
-          )}
+    <TouchableOpacity style={GLOBAL_STYLES.card} activeOpacity={0.7}>
+      {/* Cabecera: Título y Fecha */}
+      <View style={styles.header}>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          <Text style={styles.date}>{date}</Text>
         </View>
-      )}
-    </View>
-  );
-}
+        <ChevronRight color={COLORS.textSecondary} size={20} />
+      </View>
 
-export const WorkoutHistoryCard = memo(WorkoutHistoryCardBase);
+      {/* Fila de Métricas Rápidas */}
+      <View style={styles.statsContainer}>
+        <View style={styles.statBadge}>
+          <Clock size={16} color={COLORS.textSecondary} />
+          <Text style={styles.statText}>{duration}</Text>
+        </View>
+        
+        <View style={styles.statBadge}>
+          <Dumbbell size={16} color={COLORS.textSecondary} />
+          <Text style={styles.statText}>{volume}</Text>
+        </View>
+        
+        {/* Renderizado condicional: Solo aparece si hay PRs */}
+        {prs > 0 && (
+          <View style={[styles.statBadge, styles.prBadge]}>
+            <Trophy size={16} color="#D97706" />
+            <Text style={[styles.statText, { color: '#D97706', fontWeight: 'bold' }]}>{prs} PRs</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Vista previa de ejercicios */}
+      <View style={styles.exerciseList}>
+        {exercises.slice(0, 3).map((ex, idx) => (
+          <Text key={idx} style={styles.exerciseText} numberOfLines={1}>
+            <Text style={styles.bulletPoint}>•</Text> {ex}
+          </Text>
+        ))}
+        {/* Indicador de ejercicios ocultos si hay más de 3 */}
+        {exercises.length > 3 && (
+          <Text style={styles.moreText}>+ {exercises.length - 3} ejercicios más</Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 const styles = StyleSheet.create({
-  historyCard: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: c.line,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    elevation: 3,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  live: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  date: { color: c.ink, fontSize: 16, fontWeight: '800' },
-  meta: { color: c.muted, fontSize: 12, marginTop: 4 },
-  emptyText: { color: c.muted, textAlign: 'center', fontSize: 13 },
-});
-
-const detailStyles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 12,
+    marginBottom: SPACING.sm,
   },
-  toggle: { flex: 1, gap: 4 },
-  toggleLabel: { color: c.green, fontSize: 12, fontWeight: '800', marginTop: 3 },
-  body: { borderTopWidth: 1, borderTopColor: c.line, marginTop: 14, paddingTop: 12, gap: 12 },
-  entry: { gap: 4 },
-  exerciseName: { color: c.ink, fontSize: 13, fontWeight: '700' },
-  detailText: { color: c.muted, fontSize: 12, marginLeft: 22 },
+  headerTextContainer: {
+    flex: 1,
+    marginRight: SPACING.md,
+  },
+  title: {
+    color: COLORS.textPrimary,
+    fontSize: 18,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  date: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  statBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceHighlight,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 6,
+  },
+  prBadge: {
+    backgroundColor: 'rgba(217, 119, 6, 0.1)', // Naranja tenue
+  },
+  statText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  exerciseList: {
+    gap: 4,
+  },
+  exerciseText: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  bulletPoint: {
+    color: COLORS.primaryDark,
+    fontWeight: 'bold',
+  },
+  moreText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+  }
 });
