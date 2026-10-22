@@ -1,13 +1,57 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
 import { Dumbbell } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { WorkoutHistoryCard } from '../../src/components/workout/WorkoutHistoryCard';
+import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
 
 export default function HistoryScreen() {
-  // Arreglo vacío simulando que la base de datos aún no tiene registros
-  const historyData: any[] = [];
+  const { history, loading, refreshHistory } = useWorkoutHistory();
+
+  // Actualizar el historial cada vez que la pantalla gana el foco
+  useFocusEffect(
+    useCallback(() => {
+      void refreshHistory();
+    }, [refreshHistory]),
+  );
+
+  // Mapear los registros de SQLite para las tarjetas del historial
+  const historyData = history.map((session) => {
+    const totalMinutes = Math.floor(session.duracionSegundos / 60);
+    const remainingSeconds = session.duracionSegundos % 60;
+    const durationStr =
+      totalMinutes > 0
+        ? `${totalMinutes} min`
+        : `${remainingSeconds} s`;
+
+    const totalVolumeKg = session.ejercicios.reduce((accEx, ex) => {
+      return (
+        accEx +
+        ex.series.reduce((accSet, s) => accSet + (s.reps || 0) * (s.pesoKg || 0), 0)
+      );
+    }, 0);
+
+    const titleStr =
+      session.ejercicios.length > 0
+        ? session.ejercicios.map((e) => e.nombre).filter(Boolean).join(', ')
+        : 'Entrenamiento';
+
+    const exercisesSummary = session.ejercicios.map(
+      (e) => `${e.nombre || 'Ejercicio'} (${e.series.length} ${e.series.length === 1 ? 'serie' : 'series'})`,
+    );
+
+    return {
+      id: session.id,
+      title: titleStr,
+      date: session.fecha,
+      duration: durationStr,
+      volume: `${Math.round(totalVolumeKg)} kg`,
+      prs: 0,
+      exercises: exercisesSummary,
+    };
+  });
 
   // Componente visual que se muestra solo cuando no hay datos
   const renderEmptyState = () => (
@@ -32,14 +76,18 @@ export default function HistoryScreen() {
 
       {/* Lista de alto rendimiento */}
       <View style={styles.listContainer}>
-        <FlashList
-          data={historyData}
-          renderItem={({ item }) => <WorkoutHistoryCard {...item} />}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={renderEmptyState} // Muestra el estado vacío si la data está vacía
-        />
+        {loading && historyData.length === 0 ? (
+          <ActivityIndicator style={{ marginTop: 60 }} color={COLORS.primaryDark} />
+        ) : (
+          <FlashList
+            data={historyData}
+            renderItem={({ item }) => <WorkoutHistoryCard {...item} />}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            ListEmptyComponent={renderEmptyState}
+          />
+        )}
       </View>
     </View>
   );
@@ -72,7 +120,7 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
     paddingTop: SPACING.xs,
   },
-  
+
   // Estilos específicos para el Estado Vacío
   emptyContainer: {
     alignItems: 'center',

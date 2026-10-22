@@ -29,6 +29,7 @@ export const useSessionStore = create<SessionState>()(
           isActive: true,
           isRunning: true,
           startTimestamp: Date.now(),
+          accumulatedMs: current.isActive ? current.accumulatedMs : 0,
         });
       },
 

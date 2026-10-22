@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity } from 'react-native';
 import { X, PlusCircle } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../theme';
 import { SetRow } from './SetRow';
@@ -11,21 +11,41 @@ interface ExerciseCardProps {
 }
 
 export const ExerciseCard = ({ exerciseIndex, exercise }: ExerciseCardProps) => {
-  const { addSet, removeSet, updateSet, toggleSetComplete, removeExercise } = useWorkoutStore();
+  const {
+    addSet,
+    removeSet,
+    updateSet,
+    toggleSetComplete,
+    removeExercise,
+    updateExercise,
+    updateMuscleGroup,
+  } = useWorkoutStore();
 
   return (
     <View style={GLOBAL_STYLES.card}>
       <View style={styles.header}>
         <Text style={styles.indexText}>{exerciseIndex}</Text>
-        <Text style={styles.exerciseName}>{exercise.name}</Text>
+        <TextInput
+          style={styles.exerciseNameInput}
+          value={exercise.name}
+          onChangeText={(text) => updateExercise(exercise.id, text)}
+          placeholder="Nombre del ejercicio"
+          placeholderTextColor={COLORS.textSecondary}
+        />
         {/* Botón para eliminar el ejercicio completo */}
-        <TouchableOpacity onPress={() => removeExercise(exercise.id)}>
+        <TouchableOpacity onPress={() => removeExercise(exercise.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <X color={COLORS.textSecondary} size={20} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.muscleGroupContainer}>
-        <Text style={styles.muscleGroupText}>{exercise.muscleGroup}</Text>
+        <TextInput
+          style={styles.muscleGroupInput}
+          value={exercise.muscleGroup}
+          onChangeText={(text) => updateMuscleGroup(exercise.id, text)}
+          placeholder="Grupo muscular (ej. Pecho)"
+          placeholderTextColor={COLORS.textSecondary}
+        />
       </View>
 
       <View style={styles.tableHeader}>
@@ -71,23 +91,32 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginRight: SPACING.sm,
   },
-  exerciseName: {
+  exerciseNameInput: {
     color: COLORS.textPrimary,
     fontSize: 18,
     fontWeight: '700',
     flex: 1,
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+  },
+  deleteExerciseBtn: {
+    padding: 4,
   },
   muscleGroupContainer: {
     backgroundColor: COLORS.surfaceHighlight,
     alignSelf: 'flex-start',
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
+    paddingVertical: 2,
     borderRadius: 6,
     marginBottom: SPACING.md,
+    minWidth: 140,
   },
-  muscleGroupText: {
+  muscleGroupInput: {
     color: COLORS.textSecondary,
     fontSize: 13,
+    paddingVertical: 2,
+    paddingHorizontal: 0,
+    fontWeight: '500',
   },
   tableHeader: {
     flexDirection: 'row',

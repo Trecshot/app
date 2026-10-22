@@ -19,13 +19,17 @@ export interface SetRecord {
 export type SetLogInput = SetRecord;
 
 export class WorkoutRepository {
+  private static isInitialized = false;
+
   /**
    * Inicialización estandarizada de tablas relacionales y migraciones en SQLite (Expo SDK 57).
    */
   static async initSchema(): Promise<void> {
-    await initDatabase();
-    const db = await getDatabase();
-    await db.withTransactionAsync(async () => {
+    if (WorkoutRepository.isInitialized) return;
+
+    try {
+      await initDatabase();
+      const db = await getDatabase();
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS session (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +46,11 @@ export class WorkoutRepository {
           FOREIGN KEY(session_id) REFERENCES session(id) ON DELETE CASCADE
         );
       `);
-    });
+      WorkoutRepository.isInitialized = true;
+    } catch (error) {
+      console.error('Error al inicializar el esquema de SQLite:', error);
+      throw error;
+    }
   }
 
   /**
@@ -66,22 +74,11 @@ export class WorkoutRepository {
       const sessionId = result.lastInsertRowId;
 
       // 2. Iterar e insertar cada serie vinculada al sessionId dentro de la MISMA transacción
-      if (sets.length > 0) {
-        const statement = await db.prepareAsync(
-          'INSERT INTO set_log (session_id, exercise_name, weight_kg, reps) VALUES ($sessionId, $exerciseName, $weightKg, $reps);',
+      for (const set of sets) {
+        await db.runAsync(
+          'INSERT INTO set_log (session_id, exercise_name, weight_kg, reps) VALUES (?, ?, ?, ?);',
+          [sessionId, set.exerciseName, set.weightKg, set.reps],
         );
-        try {
-          for (const set of sets) {
-            await statement.executeAsync({
-              $sessionId: sessionId,
-              $exerciseName: set.exerciseName,
-              $weightKg: set.weightKg,
-              $reps: set.reps,
-            });
-          }
-        } finally {
-          await statement.finalizeAsync();
-        }
       }
     });
   }

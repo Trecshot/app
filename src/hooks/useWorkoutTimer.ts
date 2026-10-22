@@ -10,29 +10,28 @@ export const useWorkoutTimer = (): number => {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval> | undefined;
+    if (!isActive || !isRunning || !startTimestamp) {
+      return undefined;
+    }
 
-    const syncElapsed = () => {
-      if (isActive && isRunning && startTimestamp) {
-        const now = Date.now();
-        const diffInSeconds = Math.floor((accumulatedMs + Math.max(0, now - startTimestamp)) / 1000);
-        setElapsedSeconds(diffInSeconds);
-      }
+    const updateTime = () => {
+      const now = Date.now();
+      const currentElapsed = Math.floor(
+        (accumulatedMs + Math.max(0, now - startTimestamp)) / 1000,
+      );
+      setElapsedSeconds(currentElapsed);
     };
 
-    if (isActive && isRunning && startTimestamp) {
-      // Sincronización a 1Hz calculando la diferencia contra el tiempo real absoluto
-      intervalId = setInterval(syncElapsed, 1000);
-    }
+    const intervalId = setInterval(updateTime, 1000);
 
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        syncElapsed();
+        updateTime();
       }
     });
 
     return () => {
-      if (intervalId) clearInterval(intervalId);
+      clearInterval(intervalId);
       subscription.remove();
     };
   }, [isActive, isRunning, startTimestamp, accumulatedMs]);
@@ -47,5 +46,5 @@ export const useWorkoutTimer = (): number => {
 
   if (!isActive) return 0;
   if (!isRunning) return Math.floor(accumulatedMs / 1000);
-  return elapsedSeconds;
+  return Math.max(Math.floor(accumulatedMs / 1000), elapsedSeconds);
 };

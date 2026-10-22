@@ -64,6 +64,20 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         duration_minutes REAL NOT NULL,
         FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS session (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        start_time INTEGER NOT NULL,
+        end_time INTEGER,
+        total_duration_seconds INTEGER
+      );
+      CREATE TABLE IF NOT EXISTS set_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER,
+        exercise_name TEXT,
+        weight_kg REAL,
+        reps INTEGER,
+        FOREIGN KEY(session_id) REFERENCES session(id) ON DELETE CASCADE
+      );
     `);
     await migrateCycleWeekColumn(db);
     await migrateAutomaticCycleWeeks(db);
@@ -100,8 +114,8 @@ async function migrateAutomaticCycleWeeks(db: SQLite.SQLiteDatabase): Promise<vo
     } finally {
       await statement.finalizeAsync();
     }
-    await db.execAsync('PRAGMA user_version = 1;');
   });
+  await db.execAsync('PRAGMA user_version = 1;');
 }
 
 async function migrateLegacySessions(db: SQLite.SQLiteDatabase): Promise<void> {

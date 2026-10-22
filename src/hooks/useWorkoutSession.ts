@@ -9,7 +9,7 @@ import type { Ejercicio, Serie, SesionEntrenamiento } from '../../types';
 
 // Utilidades estáticas
 const generateId = () => Crypto.randomUUID();
-export const createEmptySet = (): Serie => ({ id: generateId(), reps: 10, pesoKg: 0 });
+export const createEmptySet = (): Serie => ({ id: generateId(), reps: 0, pesoKg: 0 });
 export const createEmptyExercise = (): Ejercicio => ({ id: generateId(), nombre: '', grupoMuscular: '', series: [createEmptySet()] });
 
 export const getLocalTodayDate = () => {

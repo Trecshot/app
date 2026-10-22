@@ -16,8 +16,9 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchHistoryData = useCallback(async () => {
+  const refreshHistory = useCallback(async () => {
     try {
+      setLoading(true);
       await WorkoutRepository.initSchema();
       const [sessions, summary] = await Promise.all([
         WorkoutRepository.getSessions(),
@@ -25,17 +26,13 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
       ]);
       setHistory(sessions);
       setWeeklySummary(summary);
-    } catch {
+    } catch (error) {
+      console.error('Error al actualizar historial:', error);
       Alert.alert('No se pudo abrir el historial', 'La base de datos local no respondió.');
     } finally {
       setLoading(false);
     }
   }, []);
-
-  const refreshHistory = useCallback(async () => {
-    setLoading(true);
-    await fetchHistoryData();
-  }, [fetchHistoryData]);
 
   const deleteWorkout = useCallback(async (workoutId: string) => {
     try {
@@ -49,7 +46,8 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+
+    async function loadInitialData() {
       try {
         await WorkoutRepository.initSchema();
         const [sessions, summary] = await Promise.all([
@@ -61,14 +59,17 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
           setWeeklySummary(summary);
           setLoading(false);
         }
-      } catch {
+      } catch (error) {
+        console.error('Error al cargar historial inicial:', error);
         if (!cancelled) {
           setLoading(false);
           Alert.alert('No se pudo abrir el historial', 'La base de datos local no respondió.');
         }
       }
     }
-    void load();
+
+    void loadInitialData();
+
     return () => {
       cancelled = true;
     };
