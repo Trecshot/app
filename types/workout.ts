@@ -1,0 +1,119 @@
+// types/workout.ts
+
+// 1. Definición estricta de grupos musculares
+export type MuscleGroup = 'Pecho' | 'Espalda' | 'Hombros' | 'Piernas' | 'Brazos' | 'Core';
+
+export const MUSCLE_GROUPS: MuscleGroup[] = [
+  'Pecho',
+  'Espalda',
+  'Hombros',
+  'Piernas',
+  'Brazos',
+  'Core',
+];
+
+// 2. Interfaz del catálogo de ejercicios
+export interface CatalogExercise {
+  id: string;
+  name: string;
+  muscleGroup: MuscleGroup;
+}
+
+// 3. Catálogo predefinido (Inyectado en SQLite al iniciar la app)
+export const EXERCISE_CATALOG: CatalogExercise[] = [
+  // --- PECHO ---
+  { id: 'p1', name: 'Press Banca Plano', muscleGroup: 'Pecho' },
+  { id: 'p2', name: 'Press Inclinado con Mancuernas', muscleGroup: 'Pecho' },
+  { id: 'p3', name: 'Aperturas en Máquina (Pec Deck)', muscleGroup: 'Pecho' },
+  { id: 'p4', name: 'Press Inclinado con Barra', muscleGroup: 'Pecho' },
+  { id: 'p5', name: 'Fondos en Paralelas (Pecho)', muscleGroup: 'Pecho' },
+  { id: 'p6', name: 'Cruces en Polea (Crossover)', muscleGroup: 'Pecho' },
+  { id: 'p7', name: 'Press Declinado con Mancuernas', muscleGroup: 'Pecho' },
+  { id: 'p8', name: 'Flexiones (Push-ups)', muscleGroup: 'Pecho' },
+
+  // --- HOMBROS ---
+  { id: 'h1', name: 'Press Militar con Barra', muscleGroup: 'Hombros' },
+  { id: 'h2', name: 'Elevaciones Laterales', muscleGroup: 'Hombros' },
+  { id: 'h3', name: 'Press Arnold', muscleGroup: 'Hombros' },
+  { id: 'h4', name: 'Pájaros / Elevaciones Posteriores', muscleGroup: 'Hombros' },
+  { id: 'h5', name: 'Face Pulls en Polea', muscleGroup: 'Hombros' },
+  { id: 'h6', name: 'Elevaciones Frontales con Mancuerna', muscleGroup: 'Hombros' },
+  { id: 'h7', name: 'Remo al Mentón (Upright Row)', muscleGroup: 'Hombros' },
+
+  // --- ESPALDA ---
+  { id: 'e1', name: 'Dominadas (Pull-ups)', muscleGroup: 'Espalda' },
+  { id: 'e2', name: 'Jalón al Pecho en Polea', muscleGroup: 'Espalda' },
+  { id: 'e3', name: 'Remo con Barra', muscleGroup: 'Espalda' },
+  { id: 'e4', name: 'Remo Gironda (Polea Baja)', muscleGroup: 'Espalda' },
+  { id: 'e5', name: 'Remo Unilateral con Mancuerna', muscleGroup: 'Espalda' },
+  { id: 'e6', name: 'Peso Muerto Convencional', muscleGroup: 'Espalda' },
+  { id: 'e7', name: 'Pullover en Polea Alta', muscleGroup: 'Espalda' },
+  { id: 'e8', name: 'Encogimientos de Trapecio', muscleGroup: 'Espalda' },
+
+  // --- PIERNAS ---
+  { id: 'pi1', name: 'Sentadilla Trasera con Barra', muscleGroup: 'Piernas' },
+  { id: 'pi2', name: 'Prensa Inclinada (Leg Press)', muscleGroup: 'Piernas' },
+  { id: 'pi3', name: 'Extensiones de Cuádriceps', muscleGroup: 'Piernas' },
+  { id: 'pi4', name: 'Curl Femoral Tumbado/Sentado', muscleGroup: 'Piernas' },
+  { id: 'pi5', name: 'Zancadas con Mancuernas', muscleGroup: 'Piernas' },
+  { id: 'pi6', name: 'Peso Muerto Rumano', muscleGroup: 'Piernas' },
+  { id: 'pi7', name: 'Elevación de Talones (Gemelos)', muscleGroup: 'Piernas' },
+  { id: 'pi8', name: 'Hip Thrust con Barra', muscleGroup: 'Piernas' },
+
+  // --- BRAZOS ---
+  { id: 'b1', name: 'Curl de Bíceps con Barra Z', muscleGroup: 'Brazos' },
+  { id: 'b2', name: 'Curl Martillo con Mancuernas', muscleGroup: 'Brazos' },
+  { id: 'b3', name: 'Extensiones de Tríceps en Polea', muscleGroup: 'Brazos' },
+  { id: 'b4', name: 'Press Francés con Barra', muscleGroup: 'Brazos' },
+  { id: 'b5', name: 'Curl Concentrado con Mancuerna', muscleGroup: 'Brazos' },
+  { id: 'b6', name: 'Fondos entre Bancos para Tríceps', muscleGroup: 'Brazos' },
+
+  // --- CORE ---
+  { id: 'c1', name: 'Plancha Abdominal', muscleGroup: 'Core' },
+  { id: 'c2', name: 'Elevaciones de Piernas Colgado', muscleGroup: 'Core' },
+  { id: 'c3', name: 'Rueda Abdominal (Ab Wheel)', muscleGroup: 'Core' },
+  { id: 'c4', name: 'Crunch en Polea Alta', muscleGroup: 'Core' },
+  { id: 'c5', name: 'Russian Twist con Disco', muscleGroup: 'Core' },
+];
+
+// Estructura de una serie
+export interface WorkoutSet {
+  id: string;
+  reps: string;
+  weight: string;
+  isCompleted: boolean;
+}
+
+// 5. Bloque de ejercicio instanciado
+export interface WorkoutExerciseBlock {
+  id: string;
+  catalogExerciseId: string; // Referencia al catálogo en lugar de string libre
+  selectedMuscleGroup: MuscleGroup; // Estado temporal para el filtro de la UI
+  sets: WorkoutSet[];
+  name?: string; // Nombre resuelto o de respaldo para compatibilidad legacy
+}
+
+// 4. Modificación de la sesión de entrenamiento
+export interface WorkoutSession {
+  id: string;
+  startTime: number;
+  endTime?: number;
+  sessionFocus: MuscleGroup[]; // Ej: ['Pecho', 'Hombros']
+  exercises: WorkoutExerciseBlock[];
+}
+
+// Utilidades del catálogo
+export function getCatalogExerciseById(id: string): CatalogExercise | undefined {
+  return EXERCISE_CATALOG.find((ex) => ex.id === id);
+}
+
+export function getCatalogExerciseName(id: string, fallbackName?: string): string {
+  const found = getCatalogExerciseById(id);
+  if (found) return found.name;
+  return fallbackName && fallbackName.trim().length > 0 ? fallbackName : 'Ejercicio no identificado';
+}
+
+export function filterExercisesByGroup(muscleGroup: MuscleGroup | null): CatalogExercise[] {
+  if (!muscleGroup) return [];
+  return EXERCISE_CATALOG.filter((ex) => ex.muscleGroup === muscleGroup);
+}

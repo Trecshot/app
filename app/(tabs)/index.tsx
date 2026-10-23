@@ -9,18 +9,27 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as Crypto from 'expo-crypto';
+import { router } from 'expo-router';
 import { Settings, Maximize, RotateCcw } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { TimerDisplay } from '../../src/components/workout/TimerDisplay';
 import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
+import { WorkoutSummaryModal } from '../../src/components/workout/WorkoutSummaryModal';
 import { useWorkoutStore } from '../../src/store/useWorkoutStore';
 import { useSessionStore } from '../../src/store/useSessionStore';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import { clearDraft } from '../../src/storage/workoutDraft';
 import type { Ejercicio, SesionEntrenamiento } from '../../types';
+import { MUSCLE_GROUPS, getCatalogExerciseName } from '../../types';
 
 export default function ActiveWorkoutScreen() {
-  const { exercises, addExercise, resetWorkout } = useWorkoutStore();
+  const {
+    sessionFocus,
+    toggleSessionFocus,
+    exercises,
+    addExercise,
+    resetWorkout,
+  } = useWorkoutStore();
   const {
     isActive,
     isRunning,
@@ -31,6 +40,7 @@ export default function ActiveWorkoutScreen() {
   } = useSessionStore();
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);
 
   const timerStatus = isRunning
     ? '• ENTRENAMIENTO EN CURSO'
@@ -64,77 +74,81 @@ export default function ActiveWorkoutScreen() {
       return;
     }
 
-    Alert.alert(
-      'Finalizar entrenamiento',
-      '¿Deseas guardar la sesión y finalizar el entrenamiento?',
-      [
-        { text: 'Continuar entrenando', style: 'cancel' },
-        {
-          text: 'Finalizar y guardar',
-          onPress: async () => {
-            try {
-              setIsSaving(true);
-              const elapsedSeconds = getElapsedSeconds();
-              const now = new Date();
-              const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
-              // Mapear y validar ejercicios
-              const validExercises: Ejercicio[] = exercises
-                .filter((ex) => ex.name.trim().length > 0)
-                .map((ex) => ({
-                  id: ex.id,
-                  nombre: ex.name.trim(),
-                  grupoMuscular: ex.muscleGroup || 'General',
-                  series: ex.sets.map((s) => ({
-                    id: s.id,
-                    reps: parseInt(s.reps, 10) || 0,
-                    pesoKg: parseFloat(s.weight) || 0,
-                  })),
-                }));
-
-              if (validExercises.length === 0) {
-                Alert.alert(
-                  'Sin ejercicios válidos',
-                  'Asegúrate de que al menos un ejercicio tenga nombre.',
-                );
-                setIsSaving(false);
-                return;
-              }
-
-              const session: SesionEntrenamiento = {
-                id: Crypto.randomUUID(),
-                fecha: todayDate,
-                duracionSegundos: elapsedSeconds,
-                tipoSemana: 'carga',
-                cycleWeek: WorkoutRepository.getIsoWeekNumber(todayDate),
-                ejercicios: validExercises,
-                cardio: null,
-              };
-
-              await WorkoutRepository.saveSession(session, startTimestamp);
-              await clearDraft();
-
-              // Reiniciar estados globales
-              endSession();
-              resetWorkout();
-
-              Alert.alert(
-                '¡Excelente trabajo! 🎉',
-                'Tu entrenamiento se guardó correctamente y ya está disponible en el Historial.',
-              );
-            } catch (error) {
-              console.error('Error al guardar sesión:', error);
-              Alert.alert(
-                'Error al guardar',
-                'Ocurrió un problema al persistir el entrenamiento en la base de datos local. Por favor inténtalo de nuevo.',
-              );
-            } finally {
-              setIsSaving(false);
-            }
-          },
-        },
-      ],
+    const hasValidExercise = exercises.some(
+      (ex) =>
+        Boolean(ex.catalogExerciseId) ||
+        Boolean(ex.name && ex.name.trim().length > 0),
     );
+
+    if (!hasValidExercise) {
+      Alert.alert(
+        'Sin ejercicios seleccionados',
+        'Selecciona al menos un ejercicio del catálogo para poder finalizar.',
+      );
+      return;
+    }
+
+    setIsSummaryModalVisible(true);
+  };
+
+  const saveActiveSession = async () => {
+    try {
+      setIsSaving(true);
+      const elapsedSeconds = getElapsedSeconds();
+      const now = new Date();
+      const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+      // Mapear y validar ejercicios con resolución de integridad referencial
+      const validExercises: Ejercicio[] = exercises
+        .filter(
+          (ex) =>
+            Boolean(ex.catalogExerciseId) ||
+            Boolean(ex.name && ex.name.trim().length > 0),
+        )
+        .map((ex) => {
+          const resolvedName = getCatalogExerciseName(
+            ex.catalogExerciseId,
+            ex.name,
+          );
+          return {
+            id: ex.id,
+            catalogExerciseId: ex.catalogExerciseId || undefined,
+            nombre: resolvedName,
+            grupoMuscular: ex.selectedMuscleGroup || 'General',
+            selectedMuscleGroup: ex.selectedMuscleGroup,
+            series: ex.sets.map((s) => ({
+              id: s.id,
+              reps: parseInt(s.reps, 10) || 0,
+              pesoKg: parseFloat(s.weight) || 0,
+            })),
+          };
+        });
+
+      const session: SesionEntrenamiento = {
+        id: Crypto.randomUUID(),
+        fecha: todayDate,
+        duracionSegundos: elapsedSeconds,
+        tipoSemana: 'carga',
+        cycleWeek: WorkoutRepository.getIsoWeekNumber(todayDate),
+        sessionFocus: sessionFocus.length > 0 ? sessionFocus : undefined,
+        ejercicios: validExercises,
+        cardio: null,
+      };
+
+      await WorkoutRepository.saveSession(session, startTimestamp);
+      await clearDraft();
+
+      endSession();
+      resetWorkout();
+    } catch (error) {
+      console.error('Error al guardar sesión:', error);
+      Alert.alert(
+        'Error al guardar',
+        'Ocurrió un problema al persistir el entrenamiento en la base de datos local.',
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -194,6 +208,49 @@ export default function ActiveWorkoutScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Enfoque del Entrenamiento (Session Focus) */}
+        <View style={styles.focusContainer}>
+          <View style={styles.focusHeaderRow}>
+            <Text style={styles.focusTitle}>ENFOQUE DEL ENTRENAMIENTO</Text>
+            {sessionFocus.length > 0 && (
+              <TouchableOpacity
+                onPress={() => sessionFocus.forEach((g) => toggleSessionFocus(g))}
+              >
+                <Text style={styles.focusClearText}>Limpiar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.focusScrollContent}
+          >
+            {MUSCLE_GROUPS.map((group) => {
+              const isSelected = sessionFocus.includes(group);
+              return (
+                <TouchableOpacity
+                  key={group}
+                  onPress={() => toggleSessionFocus(group)}
+                  style={[
+                    styles.focusChip,
+                    isSelected && styles.focusChipActive,
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.focusChipText,
+                      isSelected && styles.focusChipTextActive,
+                    ]}
+                  >
+                    {group}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+
         {/* Componentes de la Rutina (Vinculados a Zustand) */}
         <Text style={styles.sectionTitle}>Ejercicios</Text>
 
@@ -220,7 +277,7 @@ export default function ActiveWorkoutScreen() {
         {/* Botón Añadir Ejercicio */}
         <TouchableOpacity
           style={styles.outlineButton}
-          onPress={addExercise}
+          onPress={() => addExercise()}
           activeOpacity={0.7}
         >
           <Text style={styles.outlineButtonText}>⊕ Añadir ejercicio</Text>
@@ -246,6 +303,17 @@ export default function ActiveWorkoutScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Modal de resumen de finalización */}
+      <WorkoutSummaryModal
+        visible={isSummaryModalVisible}
+        onClose={() => setIsSummaryModalVisible(false)}
+        onSaveSession={saveActiveSession}
+        onNavigateToHistory={() => {
+          setIsSummaryModalVisible(false);
+          router.navigate('/history');
+        }}
+      />
     </View>
   );
 }
@@ -344,5 +412,51 @@ const styles = StyleSheet.create({
   solidButtonText: {
     fontWeight: '700',
     fontSize: 16,
+  },
+  focusContainer: {
+    marginBottom: SPACING.lg,
+  },
+  focusHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+  },
+  focusTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: COLORS.textSecondary,
+  },
+  focusClearText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.danger,
+  },
+  focusScrollContent: {
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
+  focusChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: COLORS.surfaceHighlight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  focusChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primaryDark,
+  },
+  focusChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  focusChipTextActive: {
+    color: COLORS.timerSurface,
+    fontWeight: '700',
   },
 });

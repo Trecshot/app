@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
-import type { Cardio, CardioLog, Ejercicio, ExerciseLog, SesionEntrenamiento, WeeklySummary, Workout, WorkoutDetails } from './types';
+import type { Cardio, CardioLog, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, WeeklySummary, Workout, WorkoutDetails } from './types';
+import { EXERCISE_CATALOG, getCatalogExerciseName } from './types';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -32,6 +33,11 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await db.execAsync(`
       PRAGMA journal_mode = WAL;
       PRAGMA foreign_keys = ON;
+      CREATE TABLE IF NOT EXISTS exercise_catalog (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        muscle_group TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS workouts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT NOT NULL UNIQUE,
@@ -39,12 +45,14 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         week_type TEXT NOT NULL CHECK (week_type IN ('carga', 'descarga')),
         cycle_week INTEGER NOT NULL DEFAULT 1 CHECK (cycle_week >= 1),
         notes TEXT,
-        duration_seconds INTEGER NOT NULL DEFAULT 0
+        duration_seconds INTEGER NOT NULL DEFAULT 0,
+        session_focus TEXT
       );
       CREATE TABLE IF NOT EXISTS exercise_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workout_id INTEGER NOT NULL,
         exercise_id TEXT NOT NULL,
+        catalog_exercise_id TEXT,
         exercise_order INTEGER NOT NULL,
         exercise_name TEXT NOT NULL,
         muscle_group TEXT NOT NULL DEFAULT 'General',
@@ -79,8 +87,12 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         FOREIGN KEY(session_id) REFERENCES session(id) ON DELETE CASCADE
       );
     `);
+    await seedExerciseCatalog(db);
     await migrateCycleWeekColumn(db);
+    await migrateSessionFocusColumn(db);
+    await migrateCatalogExerciseIdColumn(db);
     await migrateAutomaticCycleWeeks(db);
+    await migrateLegacyExerciseCatalogLinks(db);
     await migrateLegacySessions(db);
     dbInstance = db;
     return db;
@@ -88,6 +100,74 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await db.closeAsync().catch(() => undefined);
     throw error;
   }
+}
+
+async function seedExerciseCatalog(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    const stmt = await db.prepareAsync(
+      'INSERT OR REPLACE INTO exercise_catalog (id, name, muscle_group) VALUES ($id, $name, $muscleGroup);',
+    );
+    try {
+      for (const ex of EXERCISE_CATALOG) {
+        await stmt.executeAsync({ $id: ex.id, $name: ex.name, $muscleGroup: ex.muscleGroup });
+      }
+    } finally {
+      await stmt.finalizeAsync();
+    }
+  });
+}
+
+async function migrateSessionFocusColumn(db: SQLite.SQLiteDatabase): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(workouts);');
+  if (!columns.some((column) => column.name === 'session_focus')) {
+    await db.execAsync('ALTER TABLE workouts ADD COLUMN session_focus TEXT;');
+  }
+}
+
+async function migrateCatalogExerciseIdColumn(db: SQLite.SQLiteDatabase): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(exercise_logs);');
+  if (!columns.some((column) => column.name === 'catalog_exercise_id')) {
+    await db.execAsync('ALTER TABLE exercise_logs ADD COLUMN catalog_exercise_id TEXT;');
+  }
+}
+
+async function migrateLegacyExerciseCatalogLinks(db: SQLite.SQLiteDatabase): Promise<void> {
+  const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+  if ((version?.user_version ?? 0) >= 2) return;
+
+  const unlinkedLogs = await db.getAllAsync<{ id: number; exercise_name: string }>(
+    "SELECT id, exercise_name FROM exercise_logs WHERE catalog_exercise_id IS NULL OR catalog_exercise_id = '';",
+  );
+
+  if (unlinkedLogs.length > 0) {
+    const catalogRows = await db.getAllAsync<{ id: string; name: string }>(
+      'SELECT id, name FROM exercise_catalog;',
+    );
+
+    await db.withTransactionAsync(async () => {
+      const updateStmt = await db.prepareAsync(
+        'UPDATE exercise_logs SET catalog_exercise_id = $catId WHERE id = $logId;',
+      );
+      try {
+        for (const log of unlinkedLogs) {
+          const normLogName = log.exercise_name.toLowerCase().trim();
+          const match = catalogRows.find(
+            (c) =>
+              c.name.toLowerCase().trim() === normLogName ||
+              normLogName.includes(c.name.toLowerCase().trim()) ||
+              c.name.toLowerCase().trim().includes(normLogName),
+          );
+          if (match) {
+            await updateStmt.executeAsync({ $catId: match.id, $logId: log.id });
+          }
+        }
+      } finally {
+        await updateStmt.finalizeAsync();
+      }
+    });
+  }
+
+  await db.execAsync('PRAGMA user_version = 2;');
 }
 
 async function migrateCycleWeekColumn(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -184,14 +264,16 @@ export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> 
       weekType: sesion.tipoSemana,
       notes: sesion.notas,
       durationSeconds: sesion.duracionSegundos,
+      sessionFocus: sesion.sessionFocus,
     },
     sesion.ejercicios.flatMap((exercise, exerciseOrder) =>
       exercise.series.map((set, setIndex) => ({
         exerciseId: exercise.id,
+        catalogExerciseId: exercise.catalogExerciseId,
         exerciseOrder,
         setId: set.id,
         exerciseName: exercise.nombre,
-        muscleGroup: exercise.grupoMuscular?.trim() || 'General',
+        muscleGroup: exercise.grupoMuscular?.trim() || exercise.selectedMuscleGroup || 'General',
         setNumber: setIndex + 1,
         reps: set.reps,
         weight: set.pesoKg,
@@ -218,20 +300,29 @@ export async function saveWorkout(
   try {
     await db.withTransactionAsync(async () => {
       const result = await db.runAsync(
-        `INSERT INTO workouts (client_id, date, week_type, cycle_week, notes, duration_seconds)
-         VALUES (?, ?, ?, ?, ?, ?);`,
-        [workout.clientId ?? createClientId(), workout.date, workout.weekType, getIsoWeekNumber(workout.date), workout.notes ?? null, workout.durationSeconds ?? 0],
+        `INSERT INTO workouts (client_id, date, week_type, cycle_week, notes, duration_seconds, session_focus)
+         VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        [
+          workout.clientId ?? createClientId(),
+          workout.date,
+          workout.weekType,
+          getIsoWeekNumber(workout.date),
+          workout.notes ?? null,
+          workout.durationSeconds ?? 0,
+          workout.sessionFocus ? JSON.stringify(workout.sessionFocus) : null,
+        ],
       );
       workoutId = result.lastInsertRowId;
       for (const [index, exercise] of exercises.entries()) {
         await db.runAsync(
           `INSERT INTO exercise_logs (
-            workout_id, exercise_id, exercise_order, exercise_name,
+            workout_id, exercise_id, catalog_exercise_id, exercise_order, exercise_name,
             muscle_group, set_id, set_number, reps, weight
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
           [
             workoutId,
             exercise.exerciseId ?? Crypto.randomUUID(),
+            exercise.catalogExerciseId ?? null,
             exercise.exerciseOrder ?? index,
             exercise.exerciseName,
             exercise.muscleGroup,
@@ -362,6 +453,7 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
       cycleWeek: number;
       notas: string | null;
       duracionSegundos: number;
+      sessionFocusJson: string | null;
       ejercicios_json: string | null;
       cardio_json: string | null;
     }>(
@@ -373,12 +465,14 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
         w.cycle_week AS cycleWeek,
         w.notes AS notas,
         w.duration_seconds AS duracionSegundos,
+        w.session_focus AS sessionFocusJson,
         (
           SELECT json_group_array(
             json_object(
               'id', e.exercise_id, 
-              'nombre', e.exercise_name,
-              'grupoMuscular', e.muscle_group,
+              'catalogExerciseId', e.catalog_exercise_id,
+              'nombre', COALESCE(cat.name, e.exercise_name),
+              'grupoMuscular', COALESCE(cat.muscle_group, e.muscle_group),
               'series', (
                 SELECT json_group_array(
                   json_object(
@@ -396,14 +490,16 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
           FROM (
             SELECT 
               exercise_id, 
+              catalog_exercise_id,
               exercise_name, 
               muscle_group, 
               MIN(exercise_order) AS min_order
             FROM exercise_logs 
             WHERE workout_id = w.id 
-            GROUP BY exercise_id, exercise_name, muscle_group
+            GROUP BY exercise_id, catalog_exercise_id, exercise_name, muscle_group
             ORDER BY min_order ASC
           ) e
+          LEFT JOIN exercise_catalog cat ON cat.id = e.catalog_exercise_id
         ) AS ejercicios_json,
         (
           SELECT json_object(
@@ -424,6 +520,15 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
     );
 
     return rows.map((row) => {
+      let sessionFocus: MuscleGroup[] | undefined;
+      if (row.sessionFocusJson) {
+        try {
+          sessionFocus = JSON.parse(row.sessionFocusJson) as MuscleGroup[];
+        } catch {
+          sessionFocus = undefined;
+        }
+      }
+
       let ejercicios: Ejercicio[] = [];
       if (row.ejercicios_json) {
         try {
@@ -431,6 +536,7 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
           if (Array.isArray(parsed)) {
             ejercicios = parsed.map((e: any) => ({
               id: String(e.id ?? Crypto.randomUUID()),
+              catalogExerciseId: e.catalogExerciseId ? String(e.catalogExerciseId) : undefined,
               nombre: String(e.nombre ?? ''),
               ...(e.grupoMuscular ? { grupoMuscular: String(e.grupoMuscular) } : {}),
               series: Array.isArray(e.series)
@@ -479,6 +585,7 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
         duracionSegundos: row.duracionSegundos ?? 0,
         tipoSemana: row.tipoSemana,
         cycleWeek: row.cycleWeek || getIsoWeekNumber(row.fecha),
+        sessionFocus,
         ejercicios,
         cardio,
       };

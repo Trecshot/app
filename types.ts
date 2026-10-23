@@ -1,3 +1,6 @@
+export * from './types/workout';
+import type { MuscleGroup } from './types/workout';
+
 export type WeekType = 'carga' | 'descarga';
 
 export interface Workout {
@@ -8,12 +11,14 @@ export interface Workout {
   cycleWeek: number;
   notes?: string;
   durationSeconds?: number;
+  sessionFocus?: MuscleGroup[];
 }
 
 export interface ExerciseLog {
   id?: number;
   workoutId: number;
   exerciseId?: string;
+  catalogExerciseId?: string;
   exerciseOrder?: number;
   setId?: string;
   exerciseName: string;
@@ -55,8 +60,10 @@ export interface Serie {
 
 export interface Ejercicio {
   id: string;
+  catalogExerciseId?: string;
   nombre: string;
   grupoMuscular?: string;
+  selectedMuscleGroup?: MuscleGroup;
   series: Serie[];
 }
 
@@ -75,6 +82,7 @@ export interface SesionEntrenamiento {
   duracionSegundos: number;
   tipoSemana: 'carga' | 'descarga';
   cycleWeek: number;
+  sessionFocus?: MuscleGroup[];
   ejercicios: Ejercicio[];
   cardio: Cardio | null;
 }

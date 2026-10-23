@@ -5,6 +5,7 @@ import { COLORS, GLOBAL_STYLES, SPACING } from '../../theme';
 
 interface WorkoutHistoryCardProps {
   title: string;
+  focus?: string;
   date: string;
   duration: string;
   volume: string;
@@ -12,14 +13,21 @@ interface WorkoutHistoryCardProps {
   exercises: string[];
 }
 
-export const WorkoutHistoryCard = ({ title, date, duration, volume, prs, exercises }: WorkoutHistoryCardProps) => {
+export const WorkoutHistoryCard = ({ title, focus, date, duration, volume, prs, exercises }: WorkoutHistoryCardProps) => {
   return (
     <TouchableOpacity style={GLOBAL_STYLES.card} activeOpacity={0.7}>
       {/* Cabecera: Título y Fecha */}
       <View style={styles.header}>
         <View style={styles.headerTextContainer}>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
-          <Text style={styles.date}>{date}</Text>
+          <View style={styles.metaRow}>
+            <Text style={styles.date}>{date}</Text>
+            {focus ? (
+              <View style={styles.focusBadge}>
+                <Text style={styles.focusText}>{focus}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
         <ChevronRight color={COLORS.textSecondary} size={20} />
       </View>
@@ -82,6 +90,23 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 13,
     fontWeight: '500',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  focusBadge: {
+    backgroundColor: 'rgba(143, 155, 122, 0.18)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  focusText: {
+    color: COLORS.primaryDark,
+    fontSize: 11,
+    fontWeight: '700',
   },
   statsContainer: {
     flexDirection: 'row',

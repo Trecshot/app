@@ -42,9 +42,15 @@ export default function HistoryScreen() {
       (e) => `${e.nombre || 'Ejercicio'} (${e.series.length} ${e.series.length === 1 ? 'serie' : 'series'})`,
     );
 
+    const focusStr =
+      session.sessionFocus && session.sessionFocus.length > 0
+        ? session.sessionFocus.join(', ')
+        : undefined;
+
     return {
       id: session.id,
       title: titleStr,
+      focus: focusStr,
       date: session.fecha,
       duration: durationStr,
       volume: `${Math.round(totalVolumeKg)} kg`,
