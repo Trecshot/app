@@ -1,14 +1,17 @@
+import * as Crypto from 'expo-crypto';
 import {
   eliminarSesion,
+  getCardioBlocksByWorkoutId,
   getDatabase,
   getIsoWeekNumber,
+  getMonthlyCardioDistance,
   getWeeklySummary,
   getWorkoutDetails,
   guardarSesion,
   initDatabase,
   obtenerSesiones,
 } from '../../../database';
-import type { SesionEntrenamiento, WeeklySummary, WorkoutDetails } from '../../../types';
+import type { CardioBlock, SesionEntrenamiento, WeeklySummary, WorkoutDetails } from '../../../types';
 
 export interface SetRecord {
   exerciseName: string;
@@ -45,6 +48,19 @@ export class WorkoutRepository {
           reps INTEGER,
           FOREIGN KEY(session_id) REFERENCES session(id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS cardio_blocks (
+          id TEXT PRIMARY KEY,
+          workout_id INTEGER,
+          session_id INTEGER,
+          cardio_type TEXT NOT NULL,
+          minutos REAL NOT NULL,
+          velocidad REAL,
+          kilometros REAL,
+          saltos INTEGER,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE,
+          FOREIGN KEY (session_id) REFERENCES session (id) ON DELETE CASCADE
+        );
       `);
       WorkoutRepository.isInitialized = true;
     } catch (error) {
@@ -62,6 +78,7 @@ export class WorkoutRepository {
     endTime: number,
     duration: number,
     sets: SetRecord[],
+    cardioBlocks?: CardioBlock[],
   ): Promise<void> {
     const db = await getDatabase();
 
@@ -80,6 +97,27 @@ export class WorkoutRepository {
           [sessionId, set.exerciseName, set.weightKg, set.reps],
         );
       }
+
+      // 3. Insertar bloques de cardio si existen (borrando primero para evitar colisiones)
+      if (cardioBlocks && cardioBlocks.length > 0) {
+        await db.runAsync('DELETE FROM cardio_blocks WHERE session_id = ?;', [sessionId]);
+        for (const block of cardioBlocks) {
+          await db.runAsync(
+            `INSERT INTO cardio_blocks (
+              id, session_id, cardio_type, minutos, velocidad, kilometros, saltos
+            ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+            [
+              Crypto.randomUUID(),
+              sessionId,
+              block.type,
+              block.minutos,
+              block.velocidad ?? null,
+              block.kilometros ?? null,
+              block.saltos ?? null,
+            ],
+          );
+        }
+      }
     });
   }
 
@@ -91,6 +129,7 @@ export class WorkoutRepository {
     endTime: number,
     duration: number,
     sets: SetRecord[] = [],
+    cardioBlocks?: CardioBlock[],
   ): Promise<number> {
     const db = await getDatabase();
     let insertedSessionId = 0;
@@ -107,6 +146,26 @@ export class WorkoutRepository {
           'INSERT INTO set_log (session_id, exercise_name, weight_kg, reps) VALUES (?, ?, ?, ?);',
           [insertedSessionId, setItem.exerciseName, setItem.weightKg, setItem.reps],
         );
+      }
+
+      if (cardioBlocks && cardioBlocks.length > 0) {
+        await db.runAsync('DELETE FROM cardio_blocks WHERE session_id = ?;', [insertedSessionId]);
+        for (const block of cardioBlocks) {
+          await db.runAsync(
+            `INSERT INTO cardio_blocks (
+              id, session_id, cardio_type, minutos, velocidad, kilometros, saltos
+            ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+            [
+              Crypto.randomUUID(),
+              insertedSessionId,
+              block.type,
+              block.minutos,
+              block.velocidad ?? null,
+              block.kilometros ?? null,
+              block.saltos ?? null,
+            ],
+          );
+        }
       }
     });
 
@@ -137,6 +196,7 @@ export class WorkoutRepository {
       endTime,
       sesion.duracionSegundos,
       granularSets,
+      sesion.cardioBlocks,
     );
   }
 
@@ -150,6 +210,14 @@ export class WorkoutRepository {
 
   static async getDetails(workoutId: number | string): Promise<WorkoutDetails> {
     return getWorkoutDetails(workoutId);
+  }
+
+  static async getCardioBlocks(workoutId: number): Promise<CardioBlock[]> {
+    return getCardioBlocksByWorkoutId(workoutId);
+  }
+
+  static async getMonthlyCardioDistance(year: number, month: number): Promise<number> {
+    return getMonthlyCardioDistance(year, month);
   }
 
   static async deleteSession(workoutId: string): Promise<void> {

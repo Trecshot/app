@@ -1,5 +1,5 @@
+import type { CardioBlock, MuscleGroup } from './types/workout';
 export * from './types/workout';
-import type { MuscleGroup } from './types/workout';
 
 export type WeekType = 'carga' | 'descarga';
 
@@ -40,6 +40,7 @@ export interface CardioLog {
 export interface WorkoutDetails {
   exercises: ExerciseLog[];
   cardio: CardioLog[];
+  cardioBlocks?: CardioBlock[];
 }
 
 export interface WeeklySummary {
@@ -85,4 +86,5 @@ export interface SesionEntrenamiento {
   sessionFocus?: MuscleGroup[];
   ejercicios: Ejercicio[];
   cardio: Cardio | null;
+  cardioBlocks?: CardioBlock[];
 }

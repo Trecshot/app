@@ -47,6 +47,24 @@ export default function HistoryScreen() {
         ? session.sessionFocus.join(', ')
         : undefined;
 
+    const cardioData = session.cardioBlocks && session.cardioBlocks.length > 0
+      ? session.cardioBlocks
+      : session.cardio
+      ? [
+          {
+            id: 'legacy-cardio',
+            type: (session.cardio.modalidad === 'Trotar'
+              ? 'Trote'
+              : session.cardio.modalidad === 'Cuerda'
+              ? 'Salto en cuerda'
+              : 'Trote') as any,
+            minutos: session.cardio.tiempoMin,
+            kilometros: session.cardio.distanciaKm,
+            velocidad: session.cardio.velocidadNivel,
+          },
+        ]
+      : [];
+
     return {
       id: session.id,
       title: titleStr,
@@ -56,6 +74,7 @@ export default function HistoryScreen() {
       volume: `${Math.round(totalVolumeKg)} kg`,
       prs: 0,
       exercises: exercisesSummary,
+      cardio: cardioData,
     };
   });
 

@@ -93,6 +93,19 @@ export interface WorkoutExerciseBlock {
   name?: string; // Nombre resuelto o de respaldo para compatibilidad legacy
 }
 
+// 6. Bloques de Cardio Polimórficos
+export type CardioType = 'Trote' | 'Caminar' | 'Salto en cuerda';
+
+export interface CardioBlock {
+  id: string;
+  type: CardioType;
+  minutos: number; // Requerido para todos
+  // Opcionales dependiendo del tipo
+  velocidad?: number; // Para Trote/Caminar
+  kilometros?: number; // Para Trote/Caminar
+  saltos?: number;    // Para Salto en cuerda
+}
+
 // 4. Modificación de la sesión de entrenamiento
 export interface WorkoutSession {
   id: string;
@@ -100,6 +113,7 @@ export interface WorkoutSession {
   endTime?: number;
   sessionFocus: MuscleGroup[]; // Ej: ['Pecho', 'Hombros']
   exercises: WorkoutExerciseBlock[];
+  cardio: CardioBlock[]; // Array opcional para soportar múltiples sesiones de cardio
 }
 
 // Utilidades del catálogo

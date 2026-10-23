@@ -14,6 +14,7 @@ import { Settings, Maximize, RotateCcw } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { TimerDisplay } from '../../src/components/workout/TimerDisplay';
 import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
+import { CardioCard } from '../../src/components/workout/CardioCard';
 import { WorkoutSummaryModal } from '../../src/components/workout/WorkoutSummaryModal';
 import { useWorkoutStore } from '../../src/store/useWorkoutStore';
 import { useSessionStore } from '../../src/store/useSessionStore';
@@ -28,6 +29,10 @@ export default function ActiveWorkoutScreen() {
     toggleSessionFocus,
     exercises,
     addExercise,
+    cardio,
+    addCardioBlock,
+    updateCardioBlock,
+    removeCardioBlock,
     resetWorkout,
   } = useWorkoutStore();
   const {
@@ -133,13 +138,11 @@ export default function ActiveWorkoutScreen() {
         sessionFocus: sessionFocus.length > 0 ? sessionFocus : undefined,
         ejercicios: validExercises,
         cardio: null,
+        cardioBlocks: cardio && cardio.length > 0 ? cardio : undefined,
       };
 
       await WorkoutRepository.saveSession(session, startTimestamp);
       await clearDraft();
-
-      endSession();
-      resetWorkout();
     } catch (error) {
       console.error('Error al guardar sesión:', error);
       Alert.alert(
@@ -149,6 +152,11 @@ export default function ActiveWorkoutScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const resetActiveSession = () => {
+    endSession();
+    resetWorkout();
   };
 
   return (
@@ -283,6 +291,31 @@ export default function ActiveWorkoutScreen() {
           <Text style={styles.outlineButtonText}>⊕ Añadir ejercicio</Text>
         </TouchableOpacity>
 
+        {/* Sección de Cardio Extra */}
+        <View style={{ marginTop: SPACING.lg }}>
+          <View style={styles.focusHeaderRow}>
+            <Text style={styles.focusTitle}>CARDIO EXTRA</Text>
+          </View>
+          {cardio && cardio.length > 0 ? (
+            cardio.map((block) => (
+              <CardioCard
+                key={block.id}
+                cardio={block}
+                onUpdate={(field, value) => updateCardioBlock(block.id, field, value)}
+                onRemove={() => removeCardioBlock(block.id)}
+              />
+            ))
+          ) : null}
+
+          <TouchableOpacity
+            style={[styles.outlineButton, { borderColor: 'rgba(193, 225, 79, 0.5)' }]}
+            onPress={() => addCardioBlock()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.outlineButtonText}>🔥 Añadir bloque de cardio</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Botón Finalizar Entrenamiento */}
         <TouchableOpacity
           style={[
@@ -308,7 +341,10 @@ export default function ActiveWorkoutScreen() {
       <WorkoutSummaryModal
         visible={isSummaryModalVisible}
         onClose={() => setIsSummaryModalVisible(false)}
+        session={{ sessionFocus, exercises, cardio }}
+        saveSession={saveActiveSession}
         onSaveSession={saveActiveSession}
+        resetSession={resetActiveSession}
         onNavigateToHistory={() => {
           setIsSummaryModalVisible(false);
           router.navigate('/history');

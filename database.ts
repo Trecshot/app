@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
-import type { Cardio, CardioLog, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, WeeklySummary, Workout, WorkoutDetails } from './types';
-import { EXERCISE_CATALOG, getCatalogExerciseName } from './types';
+import type { Cardio, CardioBlock, CardioLog, CardioType, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, WeeklySummary, Workout, WorkoutDetails } from './types';
+import { EXERCISE_CATALOG } from './types';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -85,6 +85,19 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         weight_kg REAL,
         reps INTEGER,
         FOREIGN KEY(session_id) REFERENCES session(id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS cardio_blocks (
+        id TEXT PRIMARY KEY,
+        workout_id INTEGER,
+        session_id INTEGER,
+        cardio_type TEXT NOT NULL,
+        minutos REAL NOT NULL,
+        velocidad REAL,
+        kilometros REAL,
+        saltos INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE,
+        FOREIGN KEY (session_id) REFERENCES session (id) ON DELETE CASCADE
       );
     `);
     await seedExerciseCatalog(db);
@@ -287,6 +300,7 @@ export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> 
           durationMinutes: sesion.cardio.tiempoMin,
         }
       : undefined,
+    sesion.cardioBlocks,
   );
 }
 
@@ -294,6 +308,7 @@ export async function saveWorkout(
   workout: Omit<Workout, 'id' | 'cycleWeek'>,
   exercises: Omit<ExerciseLog, 'id' | 'workoutId'>[],
   cardio?: Omit<CardioLog, 'id' | 'workoutId'>,
+  cardioBlocks?: CardioBlock[],
 ): Promise<number> {
   const db = await getDatabase();
   let workoutId = 0;
@@ -339,6 +354,25 @@ export async function saveWorkout(
            VALUES (?, ?, ?, ?, ?);`,
           [workoutId, cardio.cardioType, cardio.level ?? null, cardio.distanceKm ?? null, cardio.durationMinutes],
         );
+      }
+      if (cardioBlocks && cardioBlocks.length > 0) {
+        await db.runAsync('DELETE FROM cardio_blocks WHERE workout_id = ?;', [workoutId]);
+        for (const block of cardioBlocks) {
+          await db.runAsync(
+            `INSERT INTO cardio_blocks (
+              id, workout_id, cardio_type, minutos, velocidad, kilometros, saltos
+            ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
+            [
+              Crypto.randomUUID(),
+              workoutId,
+              block.type,
+              block.minutos,
+              block.velocidad ?? null,
+              block.kilometros ?? null,
+              block.saltos ?? null,
+            ],
+          );
+        }
       }
     });
     return workoutId;
@@ -434,11 +468,34 @@ export async function getWorkoutDetails(workoutId: number | string): Promise<Wor
        FROM cardio_logs WHERE workout_id = ?;`,
       [workout.id],
     );
+    const cardioBlocks = await db.getAllAsync<{
+      id: string;
+      cardio_type: CardioType;
+      minutos: number;
+      velocidad: number | null;
+      kilometros: number | null;
+      saltos: number | null;
+    }>(
+      `SELECT id, cardio_type, minutos, velocidad, kilometros, saltos
+       FROM cardio_blocks WHERE workout_id = ?;`,
+      [workout.id],
+    );
 
-    return { exercises, cardio };
+    return {
+      exercises,
+      cardio,
+      cardioBlocks: cardioBlocks.map((cb) => ({
+        id: cb.id,
+        type: cb.cardio_type,
+        minutos: cb.minutos,
+        ...(cb.velocidad !== null ? { velocidad: cb.velocidad } : {}),
+        ...(cb.kilometros !== null ? { kilometros: cb.kilometros } : {}),
+        ...(cb.saltos !== null ? { saltos: cb.saltos } : {}),
+      })),
+    };
   } catch (error) {
     console.error('Error al obtener el detalle del entrenamiento:', error);
-    return { exercises: [], cardio: [] };
+    return { exercises: [], cardio: [], cardioBlocks: [] };
   }
 }
 
@@ -456,6 +513,7 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
       sessionFocusJson: string | null;
       ejercicios_json: string | null;
       cardio_json: string | null;
+      cardio_blocks_json: string | null;
     }>(
       `SELECT 
         w.id,
@@ -512,7 +570,21 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
           FROM cardio_logs c
           WHERE c.workout_id = w.id
           LIMIT 1
-        ) AS cardio_json
+        ) AS cardio_json,
+        (
+          SELECT json_group_array(
+            json_object(
+              'id', cb.id,
+              'type', cb.cardio_type,
+              'minutos', cb.minutos,
+              'velocidad', cb.velocidad,
+              'kilometros', cb.kilometros,
+              'saltos', cb.saltos
+            )
+          )
+          FROM cardio_blocks cb
+          WHERE cb.workout_id = w.id OR cb.session_id = w.id
+        ) AS cardio_blocks_json
       FROM workouts w
       ORDER BY w.date DESC, w.id DESC
       LIMIT ? OFFSET ?;`,
@@ -578,6 +650,25 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
         }
       }
 
+      let cardioBlocks: CardioBlock[] | undefined;
+      if (row.cardio_blocks_json) {
+        try {
+          const parsed = JSON.parse(row.cardio_blocks_json) as unknown[];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            cardioBlocks = parsed.map((cb: any) => ({
+              id: String(cb.id ?? Crypto.randomUUID()),
+              type: cb.type as CardioType,
+              minutos: Number(cb.minutos ?? 0),
+              ...(cb.velocidad !== null && cb.velocidad !== undefined ? { velocidad: Number(cb.velocidad) } : {}),
+              ...(cb.kilometros !== null && cb.kilometros !== undefined ? { kilometros: Number(cb.kilometros) } : {}),
+              ...(cb.saltos !== null && cb.saltos !== undefined ? { saltos: Number(cb.saltos) } : {}),
+            }));
+          }
+        } catch (err) {
+          console.error('Error al deserializar cardio blocks JSON:', err);
+        }
+      }
+
       return {
         id: row.clientId || String(row.id),
         fecha: row.fecha,
@@ -588,12 +679,54 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
         sessionFocus,
         ejercicios,
         cardio,
+        cardioBlocks,
       };
     });
   } catch (error) {
     console.error('Error al obtener sesiones:', error);
     return [];
   }
+}
+
+export async function getCardioBlocksByWorkoutId(workoutId: number): Promise<CardioBlock[]> {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<{
+    id: string;
+    cardio_type: CardioType;
+    minutos: number;
+    velocidad: number | null;
+    kilometros: number | null;
+    saltos: number | null;
+  }>(
+    `SELECT id, cardio_type, minutos, velocidad, kilometros, saltos
+     FROM cardio_blocks WHERE workout_id = ?;`,
+    [workoutId],
+  );
+
+  return rows.map((cb) => ({
+    id: cb.id,
+    type: cb.cardio_type,
+    minutos: cb.minutos,
+    ...(cb.velocidad !== null ? { velocidad: cb.velocidad } : {}),
+    ...(cb.kilometros !== null ? { kilometros: cb.kilometros } : {}),
+    ...(cb.saltos !== null ? { saltos: cb.saltos } : {}),
+  }));
+}
+
+export async function getMonthlyCardioDistance(year: number, month: number): Promise<number> {
+  const db = await getDatabase();
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+
+  const result = await db.getFirstAsync<{ total_km: number | null }>(
+    `SELECT SUM(cb.kilometros) AS total_km
+     FROM cardio_blocks cb
+     LEFT JOIN workouts w ON cb.workout_id = w.id
+     WHERE w.date BETWEEN ? AND ?;`,
+    [startDate, endDate],
+  );
+
+  return result?.total_km ?? 0;
 }
 
 export async function eliminarSesion(id: string): Promise<void> {

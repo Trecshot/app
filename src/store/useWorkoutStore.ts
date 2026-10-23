@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
@@ -8,6 +9,7 @@ import {
   MUSCLE_GROUPS,
   WorkoutExerciseBlock,
   WorkoutSet,
+  CardioBlock,
 } from '../../types';
 
 export type { WorkoutExerciseBlock, WorkoutSet };
@@ -17,6 +19,10 @@ export type WorkoutExercise = WorkoutExerciseBlock;
 export interface WorkoutStore {
   sessionFocus: MuscleGroup[];
   exercises: WorkoutExerciseBlock[];
+  cardio: CardioBlock[];
+  session?: {
+    cardio: CardioBlock[];
+  };
 
   // Acciones de Enfoque de Sesión
   setSessionFocus: (focus: MuscleGroup[]) => void;
@@ -37,6 +43,11 @@ export interface WorkoutStore {
   toggleSetComplete: (exerciseId: string, setId: string) => void;
   completeAllSetsInBlock: (blockId: string) => void;
 
+  // Acciones de Cardio
+  addCardioBlock: () => void;
+  updateCardioBlock: (id: string, field: keyof CardioBlock, value: any) => void;
+  removeCardioBlock: (id: string) => void;
+
   // Reiniciar
   resetWorkout: () => void;
 }
@@ -49,6 +60,10 @@ export const useWorkoutStore = create<WorkoutStore>()(
     (set, get) => ({
       sessionFocus: [],
       exercises: [],
+      cardio: [],
+      session: {
+        cardio: [],
+      },
 
       setSessionFocus: (focus: MuscleGroup[]) => set({ sessionFocus: focus }),
 
@@ -195,10 +210,56 @@ export const useWorkoutStore = create<WorkoutStore>()(
           ),
         })),
 
+      // Acciones de Cardio
+      addCardioBlock: () =>
+        set((state) => {
+          const newCardio: CardioBlock[] = [
+            ...(state.cardio || []),
+            { id: Crypto.randomUUID(), type: 'Trote', minutos: 0 },
+          ];
+          return {
+            cardio: newCardio,
+            session: {
+              ...(state.session || {}),
+              cardio: newCardio,
+            },
+          };
+        }),
+
+      updateCardioBlock: (id, field, value) =>
+        set((state) => {
+          const newCardio = (state.cardio || []).map((item) =>
+            item.id === id ? { ...item, [field]: value } : item,
+          );
+          return {
+            cardio: newCardio,
+            session: {
+              ...(state.session || {}),
+              cardio: newCardio,
+            },
+          };
+        }),
+
+      removeCardioBlock: (id) =>
+        set((state) => {
+          const newCardio = (state.cardio || []).filter((item) => item.id !== id);
+          return {
+            cardio: newCardio,
+            session: {
+              ...(state.session || {}),
+              cardio: newCardio,
+            },
+          };
+        }),
+
       resetWorkout: () =>
         set({
           sessionFocus: [],
           exercises: [],
+          cardio: [],
+          session: {
+            cardio: [],
+          },
         }),
     }),
     {
