@@ -90,33 +90,35 @@ export class WorkoutRepository {
       );
       const sessionId = result.lastInsertRowId;
 
-      // 2. Iterar e insertar cada serie vinculada al sessionId dentro de la MISMA transacción
-      for (const set of sets) {
+      // 2. Inserción en Bloque (Bulk Insert) de series
+      if (sets.length > 0) {
+        const placeholders = sets.map(() => '(?, ?, ?, ?)').join(', ');
+        const values = sets.flatMap((set) => [sessionId, set.exerciseName, set.weightKg, set.reps]);
         await db.runAsync(
-          'INSERT INTO set_log (session_id, exercise_name, weight_kg, reps) VALUES (?, ?, ?, ?);',
-          [sessionId, set.exerciseName, set.weightKg, set.reps],
+          `INSERT INTO set_log (session_id, exercise_name, weight_kg, reps) VALUES ${placeholders};`,
+          values,
         );
       }
 
-      // 3. Insertar bloques de cardio si existen (borrando primero para evitar colisiones)
+      // 3. Inserción en Bloque (Bulk Insert) de bloques de cardio
       if (cardioBlocks && cardioBlocks.length > 0) {
         await db.runAsync('DELETE FROM cardio_blocks WHERE session_id = ?;', [sessionId]);
-        for (const block of cardioBlocks) {
-          await db.runAsync(
-            `INSERT INTO cardio_blocks (
-              id, session_id, cardio_type, minutos, velocidad, kilometros, saltos
-            ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
-            [
-              Crypto.randomUUID(),
-              sessionId,
-              block.type,
-              block.minutos,
-              block.velocidad ?? null,
-              block.kilometros ?? null,
-              block.saltos ?? null,
-            ],
-          );
-        }
+        const placeholders = cardioBlocks.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const values = cardioBlocks.flatMap((block) => [
+          Crypto.randomUUID(),
+          sessionId,
+          block.type,
+          block.minutos,
+          block.velocidad ?? null,
+          block.kilometros ?? null,
+          block.saltos ?? null,
+        ]);
+        await db.runAsync(
+          `INSERT INTO cardio_blocks (
+            id, session_id, cardio_type, minutos, velocidad, kilometros, saltos
+          ) VALUES ${placeholders};`,
+          values,
+        );
       }
     });
   }
@@ -141,31 +143,33 @@ export class WorkoutRepository {
       );
       insertedSessionId = result.lastInsertRowId;
 
-      for (const setItem of sets) {
+      if (sets.length > 0) {
+        const placeholders = sets.map(() => '(?, ?, ?, ?)').join(', ');
+        const values = sets.flatMap((setItem) => [insertedSessionId, setItem.exerciseName, setItem.weightKg, setItem.reps]);
         await db.runAsync(
-          'INSERT INTO set_log (session_id, exercise_name, weight_kg, reps) VALUES (?, ?, ?, ?);',
-          [insertedSessionId, setItem.exerciseName, setItem.weightKg, setItem.reps],
+          `INSERT INTO set_log (session_id, exercise_name, weight_kg, reps) VALUES ${placeholders};`,
+          values,
         );
       }
 
       if (cardioBlocks && cardioBlocks.length > 0) {
         await db.runAsync('DELETE FROM cardio_blocks WHERE session_id = ?;', [insertedSessionId]);
-        for (const block of cardioBlocks) {
-          await db.runAsync(
-            `INSERT INTO cardio_blocks (
-              id, session_id, cardio_type, minutos, velocidad, kilometros, saltos
-            ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
-            [
-              Crypto.randomUUID(),
-              insertedSessionId,
-              block.type,
-              block.minutos,
-              block.velocidad ?? null,
-              block.kilometros ?? null,
-              block.saltos ?? null,
-            ],
-          );
-        }
+        const placeholders = cardioBlocks.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const values = cardioBlocks.flatMap((block) => [
+          Crypto.randomUUID(),
+          insertedSessionId,
+          block.type,
+          block.minutos,
+          block.velocidad ?? null,
+          block.kilometros ?? null,
+          block.saltos ?? null,
+        ]);
+        await db.runAsync(
+          `INSERT INTO cardio_blocks (
+            id, session_id, cardio_type, minutos, velocidad, kilometros, saltos
+          ) VALUES ${placeholders};`,
+          values,
+        );
       }
     });
 

@@ -20,7 +20,7 @@ import { useWorkoutStore } from '../../src/store/useWorkoutStore';
 import { useSessionStore } from '../../src/store/useSessionStore';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import { clearDraft } from '../../src/storage/workoutDraft';
-import type { Ejercicio, SesionEntrenamiento } from '../../types';
+import type { CardioBlock, Ejercicio, MuscleGroup, SesionEntrenamiento, WorkoutExerciseBlock } from '../../types';
 import { MUSCLE_GROUPS, getCatalogExerciseName } from '../../types';
 
 export default function ActiveWorkoutScreen() {
@@ -46,6 +46,12 @@ export default function ActiveWorkoutScreen() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);
+  const [modalSummary, setModalSummary] = useState<{
+    sessionFocus: MuscleGroup[];
+    exercises: WorkoutExerciseBlock[];
+    cardio: CardioBlock[];
+    durationSeconds: number;
+  } | null>(null);
 
   const timerStatus = isRunning
     ? '• ENTRENAMIENTO EN CURSO'
@@ -93,18 +99,42 @@ export default function ActiveWorkoutScreen() {
       return;
     }
 
+    // 1. Snapshot inmutable de la sesión para el Modal (Optimistic Rendering)
+    const currentDuration = getElapsedSeconds();
+    const sessionSnapshot = {
+      sessionFocus: [...sessionFocus],
+      exercises: JSON.parse(JSON.stringify(exercises)),
+      cardio: JSON.parse(JSON.stringify(cardio)),
+      durationSeconds: currentDuration,
+    };
+    setModalSummary(sessionSnapshot);
+
+    // 2. Activar el Modal de forma INMEDIATA
     setIsSummaryModalVisible(true);
+
+    // 3. Ejecutar el guardado en base de datos de forma asíncrona "silenciosa" (Background)
+    saveActiveSession(sessionSnapshot).catch((error) => {
+      console.error('Fallo de persistencia en segundo plano:', error);
+    });
   };
 
-  const saveActiveSession = async () => {
+  const saveActiveSession = async (snapshot?: {
+    sessionFocus: MuscleGroup[];
+    exercises: WorkoutExerciseBlock[];
+    cardio: CardioBlock[];
+    durationSeconds: number;
+  }) => {
     try {
       setIsSaving(true);
-      const elapsedSeconds = getElapsedSeconds();
+      const activeExercises = snapshot ? snapshot.exercises : exercises;
+      const activeCardio = snapshot ? snapshot.cardio : cardio;
+      const activeFocus = snapshot ? snapshot.sessionFocus : sessionFocus;
+      const elapsedSeconds = snapshot ? snapshot.durationSeconds : getElapsedSeconds();
       const now = new Date();
       const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       // Mapear y validar ejercicios con resolución de integridad referencial
-      const validExercises: Ejercicio[] = exercises
+      const validExercises: Ejercicio[] = activeExercises
         .filter(
           (ex) =>
             Boolean(ex.catalogExerciseId) ||
@@ -135,10 +165,10 @@ export default function ActiveWorkoutScreen() {
         duracionSegundos: elapsedSeconds,
         tipoSemana: 'carga',
         cycleWeek: WorkoutRepository.getIsoWeekNumber(todayDate),
-        sessionFocus: sessionFocus.length > 0 ? sessionFocus : undefined,
+        sessionFocus: activeFocus.length > 0 ? activeFocus : undefined,
         ejercicios: validExercises,
         cardio: null,
-        cardioBlocks: cardio && cardio.length > 0 ? cardio : undefined,
+        cardioBlocks: activeCardio && activeCardio.length > 0 ? activeCardio : undefined,
       };
 
       await WorkoutRepository.saveSession(session, startTimestamp);
@@ -341,9 +371,10 @@ export default function ActiveWorkoutScreen() {
       <WorkoutSummaryModal
         visible={isSummaryModalVisible}
         onClose={() => setIsSummaryModalVisible(false)}
-        session={{ sessionFocus, exercises, cardio }}
-        saveSession={saveActiveSession}
-        onSaveSession={saveActiveSession}
+        session={modalSummary ?? { sessionFocus, exercises, cardio }}
+        durationSeconds={modalSummary?.durationSeconds}
+        saveSession={() => {}}
+        onSaveSession={() => {}}
         resetSession={resetActiveSession}
         onNavigateToHistory={() => {
           setIsSummaryModalVisible(false);

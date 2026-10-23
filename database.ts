@@ -328,26 +328,31 @@ export async function saveWorkout(
         ],
       );
       workoutId = result.lastInsertRowId;
-      for (const [index, exercise] of exercises.entries()) {
+
+      // 1. Inserción en Bloque (Bulk Insert) de series/ejercicios
+      if (exercises.length > 0) {
+        const placeholders = exercises.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const values = exercises.flatMap((exercise, index) => [
+          workoutId,
+          exercise.exerciseId ?? Crypto.randomUUID(),
+          exercise.catalogExerciseId ?? null,
+          exercise.exerciseOrder ?? index,
+          exercise.exerciseName,
+          exercise.muscleGroup,
+          exercise.setId ?? Crypto.randomUUID(),
+          exercise.setNumber,
+          exercise.reps,
+          exercise.weight,
+        ]);
         await db.runAsync(
           `INSERT INTO exercise_logs (
             workout_id, exercise_id, catalog_exercise_id, exercise_order, exercise_name,
             muscle_group, set_id, set_number, reps, weight
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-          [
-            workoutId,
-            exercise.exerciseId ?? Crypto.randomUUID(),
-            exercise.catalogExerciseId ?? null,
-            exercise.exerciseOrder ?? index,
-            exercise.exerciseName,
-            exercise.muscleGroup,
-            exercise.setId ?? Crypto.randomUUID(),
-            exercise.setNumber,
-            exercise.reps,
-            exercise.weight,
-          ],
+          ) VALUES ${placeholders};`,
+          values,
         );
       }
+
       if (cardio) {
         await db.runAsync(
           `INSERT INTO cardio_logs (workout_id, cardio_type, level, distance_km, duration_minutes)
@@ -355,24 +360,26 @@ export async function saveWorkout(
           [workoutId, cardio.cardioType, cardio.level ?? null, cardio.distanceKm ?? null, cardio.durationMinutes],
         );
       }
+
+      // 2. Inserción en Bloque (Bulk Insert) de bloques de cardio
       if (cardioBlocks && cardioBlocks.length > 0) {
         await db.runAsync('DELETE FROM cardio_blocks WHERE workout_id = ?;', [workoutId]);
-        for (const block of cardioBlocks) {
-          await db.runAsync(
-            `INSERT INTO cardio_blocks (
-              id, workout_id, cardio_type, minutos, velocidad, kilometros, saltos
-            ) VALUES (?, ?, ?, ?, ?, ?, ?);`,
-            [
-              Crypto.randomUUID(),
-              workoutId,
-              block.type,
-              block.minutos,
-              block.velocidad ?? null,
-              block.kilometros ?? null,
-              block.saltos ?? null,
-            ],
-          );
-        }
+        const placeholders = cardioBlocks.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+        const values = cardioBlocks.flatMap((block) => [
+          Crypto.randomUUID(),
+          workoutId,
+          block.type,
+          block.minutos,
+          block.velocidad ?? null,
+          block.kilometros ?? null,
+          block.saltos ?? null,
+        ]);
+        await db.runAsync(
+          `INSERT INTO cardio_blocks (
+            id, workout_id, cardio_type, minutos, velocidad, kilometros, saltos
+          ) VALUES ${placeholders};`,
+          values,
+        );
       }
     });
     return workoutId;
