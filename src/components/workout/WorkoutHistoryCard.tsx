@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Clock, Dumbbell, Trophy, ChevronRight } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { Clock, Dumbbell, Trophy, MoreVertical } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../theme';
 import type { CardioBlock } from '../../../types';
 
@@ -13,6 +13,8 @@ export interface WorkoutHistoryCardProps {
   prs?: number;
   exercises?: string[];
   cardio?: CardioBlock[];
+  /** Si se define, muestra el menú (⋮) con la opción de eliminar el registro. */
+  onDelete?: () => void | Promise<void>;
   session?: {
     id?: string;
     fecha?: string;
@@ -33,6 +35,7 @@ export const WorkoutHistoryCard = ({
   exercises = [],
   cardio = [],
   session,
+  onDelete,
 }: WorkoutHistoryCardProps) => {
   const displayTitle = title ?? (session?.exercises && session.exercises.length > 0
     ? session.exercises.map((e) => e.name).join(', ')
@@ -44,6 +47,20 @@ export const WorkoutHistoryCard = ({
     ? exercises
     : (session?.exercises ?? []).map((e) => `${e.name} (${e.sets?.length || 0} series)`);
   const cardioList = (session?.cardio && session.cardio.length > 0) ? session.cardio : cardio;
+
+  // Menú contextual: confirmación nativa antes de borrar para evitar eliminaciones accidentales
+  const handleOpenMenu = () => {
+    if (!onDelete) return;
+    Alert.alert(
+      'Eliminar entrenamiento',
+      `¿Seguro que quieres eliminar la sesión del ${displayDate}? Se borrarán también sus ejercicios, series y cardio. Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Eliminar', style: 'destructive', onPress: () => void onDelete() },
+      ],
+      { cancelable: true },
+    );
+  };
 
   return (
     <TouchableOpacity style={GLOBAL_STYLES.card} activeOpacity={0.7}>
@@ -60,7 +77,17 @@ export const WorkoutHistoryCard = ({
             ) : null}
           </View>
         </View>
-        <ChevronRight color={COLORS.textSecondary} size={20} />
+        {onDelete ? (
+          <TouchableOpacity
+            onPress={handleOpenMenu}
+            style={styles.menuButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityRole="button"
+            accessibilityLabel="Opciones del entrenamiento"
+          >
+            <MoreVertical color={COLORS.textSecondary} size={20} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {/* Fila de Métricas Rápidas */}
@@ -127,6 +154,12 @@ const styles = StyleSheet.create({
   headerTextContainer: {
     flex: 1,
     marginRight: SPACING.md,
+  },
+  menuButton: {
+    padding: 4,
+    marginTop: -2,
+    marginRight: -4,
+    borderRadius: 8,
   },
   title: {
     color: COLORS.textPrimary,

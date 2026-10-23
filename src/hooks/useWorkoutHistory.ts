@@ -1,10 +1,59 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import { WorkoutRepository } from '../db/repositories/WorkoutRepository';
-import type { SesionEntrenamiento, WeeklySummary } from '../../types';
+import type { SesionEntrenamiento, TrainingBlock, WeeklySummary } from '../../types';
+
+export interface WorkoutBlockSection {
+  /** Ej: "Semana de Carga (12/10 al 19/10)" */
+  title: string;
+  /** Sesiones pertenecientes al bloque */
+  data: SesionEntrenamiento[];
+  /** Cantidad de sesiones del bloque */
+  sessionCount: number;
+  /** Clave estable del bloque (id o 'sin-bloque') */
+  key: string;
+  block?: TrainingBlock;
+}
+
+function formatDayMonth(iso: string): string {
+  const date = new Date(iso);
+  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function getBlockSectionTitle(block?: TrainingBlock): string {
+  if (!block) return 'Sin bloque asignado';
+  const label = block.type === 'carga' ? 'Carga' : 'Descarga';
+  return `Semana de ${label} (${formatDayMonth(block.startDate)} al ${formatDayMonth(block.endDate)})`;
+}
+
+/**
+ * Reductor: agrupa la lista plana de sesiones (ya ordenada por bloque desde SQLite)
+ * en secciones por `training_blocks`, preservando el orden de llegada.
+ */
+export function groupSessionsByBlock(sessions: readonly SesionEntrenamiento[]): WorkoutBlockSection[] {
+  const sections = sessions.reduce<Map<string, WorkoutBlockSection>>((acc, session) => {
+    const key = session.blockId ?? 'sin-bloque';
+    const section = acc.get(key);
+    if (section) {
+      section.data.push(session);
+      section.sessionCount += 1;
+    } else {
+      acc.set(key, {
+        key,
+        block: session.block,
+        title: getBlockSectionTitle(session.block),
+        data: [session],
+        sessionCount: 1,
+      });
+    }
+    return acc;
+  }, new Map());
+  return Array.from(sections.values());
+}
 
 export interface UseWorkoutHistoryResult {
   readonly history: readonly SesionEntrenamiento[];
+  readonly sections: readonly WorkoutBlockSection[];
   readonly weeklySummary: readonly WeeklySummary[];
   readonly loading: boolean;
   readonly refreshHistory: () => Promise<void>;
@@ -36,7 +85,7 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
 
   const deleteWorkout = useCallback(async (workoutId: string) => {
     try {
-      await WorkoutRepository.deleteSession(workoutId);
+      await WorkoutRepository.deleteWorkoutById(workoutId);
       setHistory((items) => items.filter((item) => item.id !== workoutId));
       setWeeklySummary(await WorkoutRepository.getWeeklySummary());
     } catch {
@@ -75,8 +124,11 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
     };
   }, []);
 
+  const sections = useMemo(() => groupSessionsByBlock(history), [history]);
+
   return {
     history,
+    sections,
     weeklySummary,
     loading,
     refreshHistory,

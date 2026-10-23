@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
-import type { Cardio, CardioBlock, CardioLog, CardioType, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, WeeklySummary, Workout, WorkoutDetails } from './types';
+import type { Cardio, CardioBlock, CardioLog, CardioType, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, TrainingBlock, WeekType, WeeklySummary, Workout, WorkoutDetails } from './types';
 import { EXERCISE_CATALOG } from './types';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
@@ -38,6 +38,13 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         name TEXT NOT NULL,
         muscle_group TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS training_blocks (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL CHECK (type IN ('carga', 'descarga')),
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_training_blocks_start ON training_blocks (start_date);
       CREATE TABLE IF NOT EXISTS workouts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id TEXT NOT NULL UNIQUE,
@@ -46,7 +53,8 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         cycle_week INTEGER NOT NULL DEFAULT 1 CHECK (cycle_week >= 1),
         notes TEXT,
         duration_seconds INTEGER NOT NULL DEFAULT 0,
-        session_focus TEXT
+        session_focus TEXT,
+        block_id TEXT REFERENCES training_blocks (id) ON DELETE SET NULL
       );
       CREATE TABLE IF NOT EXISTS exercise_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -107,6 +115,8 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await migrateAutomaticCycleWeeks(db);
     await migrateLegacyExerciseCatalogLinks(db);
     await migrateLegacySessions(db);
+    await migrateTrainingBlocks(db);
+    await migrateDuplicatedSessionCardio(db);
     dbInstance = db;
     return db;
   } catch (error) {
@@ -257,6 +267,150 @@ async function migrateLegacySessions(db: SQLite.SQLiteDatabase): Promise<void> {
   });
 }
 
+/** Duración fija de un bloque de entrenamiento (7 días naturales). */
+export const TRAINING_BLOCK_DAYS = 7;
+
+/** Medianoche local del día de `date`. */
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+/** Suma días respetando cambios de horario (DST). */
+function addLocalDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+/** Convierte 'YYYY-MM-DD' a fecha local (medianoche). */
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+/**
+ * Migración v3: añade `workouts.block_id` y asigna bloques de 7 días (lunes a domingo)
+ * a los entrenamientos que existían antes de introducir `training_blocks`.
+ */
+async function migrateTrainingBlocks(db: SQLite.SQLiteDatabase): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(workouts);');
+  if (!columns.some((column) => column.name === 'block_id')) {
+    // SQLite permite añadir una columna con REFERENCES siempre que su valor por defecto sea NULL.
+    await db.execAsync(
+      'ALTER TABLE workouts ADD COLUMN block_id TEXT REFERENCES training_blocks (id) ON DELETE SET NULL;',
+    );
+  }
+  await db.execAsync('CREATE INDEX IF NOT EXISTS idx_workouts_block_id ON workouts (block_id);');
+
+  const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+  if ((version?.user_version ?? 0) >= 3) return;
+
+  const orphanWorkouts = await db.getAllAsync<{ id: number; date: string; weekType: WeekType }>(
+    'SELECT id, date, week_type AS weekType FROM workouts WHERE block_id IS NULL ORDER BY date ASC, id ASC;',
+  );
+
+  if (orphanWorkouts.length > 0) {
+    await db.withTransactionAsync(async () => {
+      const blocksByWeek = new Map<string, string>();
+      for (const workout of orphanWorkouts) {
+        const day = parseLocalDate(workout.date);
+        if (Number.isNaN(day.getTime())) continue;
+        const weekStart = addLocalDays(day, -((day.getDay() + 6) % 7));
+        const key = weekStart.toISOString();
+
+        let blockId = blocksByWeek.get(key);
+        if (!blockId) {
+          blockId = Crypto.randomUUID();
+          await db.runAsync(
+            'INSERT INTO training_blocks (id, type, start_date, end_date) VALUES (?, ?, ?, ?);',
+            [blockId, workout.weekType, key, addLocalDays(weekStart, TRAINING_BLOCK_DAYS).toISOString()],
+          );
+          blocksByWeek.set(key, blockId);
+        }
+        await db.runAsync('UPDATE workouts SET block_id = ? WHERE id = ?;', [blockId, workout.id]);
+      }
+    });
+  }
+
+  await db.execAsync('PRAGMA user_version = 3;');
+}
+
+/**
+ * Migración v4: elimina los bloques de cardio duplicados que se guardaban ligados solo a la
+ * tabla `session` (sin `workout_id`). La copia válida siempre está ligada a `workouts`.
+ * Antes, el historial los cruzaba por `session_id = workouts.id` (IDs de secuencias distintas),
+ * mostrando cardio repetido o en la sesión equivocada, y no se borraban al eliminar un entrenamiento.
+ */
+async function migrateDuplicatedSessionCardio(db: SQLite.SQLiteDatabase): Promise<void> {
+  const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+  if ((version?.user_version ?? 0) >= 4) return;
+
+  await db.execAsync(`
+    DELETE FROM cardio_blocks WHERE workout_id IS NULL;
+    PRAGMA user_version = 4;
+  `);
+}
+
+interface TrainingBlockRow {
+  id: string;
+  type: WeekType;
+  startDate: string;
+  endDate: string;
+}
+
+const TRAINING_BLOCK_COLUMNS = 'id, type, start_date AS startDate, end_date AS endDate';
+
+/** Último bloque registrado (el de fecha de inicio más reciente). */
+export async function getLatestTrainingBlock(): Promise<TrainingBlock | null> {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<TrainingBlockRow>(
+    `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks ORDER BY start_date DESC LIMIT 1;`,
+  );
+  return row ?? null;
+}
+
+/** Bloque cuyo rango [start_date, end_date) contiene la fecha indicada. */
+export async function findTrainingBlockForDate(date: Date = new Date()): Promise<TrainingBlock | null> {
+  const db = await getDatabase();
+  const iso = date.toISOString();
+  const row = await db.getFirstAsync<TrainingBlockRow>(
+    `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks
+     WHERE start_date <= ? AND end_date > ?
+     ORDER BY start_date DESC LIMIT 1;`,
+    [iso, iso],
+  );
+  return row ?? null;
+}
+
+/** Crea un bloque de 7 días que comienza hoy a medianoche (hora local). */
+export async function createTrainingBlock(type: WeekType, from: Date = new Date()): Promise<TrainingBlock> {
+  const db = await getDatabase();
+  const start = startOfLocalDay(from);
+  const block: TrainingBlock = {
+    id: Crypto.randomUUID(),
+    type,
+    startDate: start.toISOString(),
+    endDate: addLocalDays(start, TRAINING_BLOCK_DAYS).toISOString(),
+  };
+  await db.runAsync(
+    'INSERT INTO training_blocks (id, type, start_date, end_date) VALUES (?, ?, ?, ?);',
+    [block.id, block.type, block.startDate, block.endDate],
+  );
+  return block;
+}
+
+/**
+ * Cambia el tipo (carga/descarga) de un bloque existente y lo propaga
+ * a todas las sesiones registradas dentro de él.
+ */
+export async function updateTrainingBlockType(blockId: string, type: WeekType): Promise<void> {
+  const db = await getDatabase();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('UPDATE training_blocks SET type = ? WHERE id = ?;', [type, blockId]);
+    await db.runAsync('UPDATE workouts SET week_type = ? WHERE block_id = ?;', [type, blockId]);
+  });
+}
+
 async function insertCardio(
   db: SQLite.SQLiteDatabase,
   workoutId: number,
@@ -278,6 +432,7 @@ export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> 
       notes: sesion.notas,
       durationSeconds: sesion.duracionSegundos,
       sessionFocus: sesion.sessionFocus,
+      blockId: sesion.blockId,
     },
     sesion.ejercicios.flatMap((exercise, exerciseOrder) =>
       exercise.series.map((set, setIndex) => ({
@@ -313,18 +468,28 @@ export async function saveWorkout(
   const db = await getDatabase();
   let workoutId = 0;
   try {
+    // Hereda el bloque (carga/descarga) vigente: el indicado explícitamente o el que cubre "ahora".
+    const block = workout.blockId
+      ? await db.getFirstAsync<TrainingBlockRow>(
+          `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks WHERE id = ?;`,
+          [workout.blockId],
+        )
+      : await findTrainingBlockForDate(new Date());
+    const weekType: WeekType = block?.type ?? workout.weekType;
+
     await db.withTransactionAsync(async () => {
       const result = await db.runAsync(
-        `INSERT INTO workouts (client_id, date, week_type, cycle_week, notes, duration_seconds, session_focus)
-         VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        `INSERT INTO workouts (client_id, date, week_type, cycle_week, notes, duration_seconds, session_focus, block_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           workout.clientId ?? createClientId(),
           workout.date,
-          workout.weekType,
+          weekType,
           getIsoWeekNumber(workout.date),
           workout.notes ?? null,
           workout.durationSeconds ?? 0,
           workout.sessionFocus ? JSON.stringify(workout.sessionFocus) : null,
+          block?.id ?? null,
         ],
       );
       workoutId = result.lastInsertRowId;
@@ -521,6 +686,10 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
       ejercicios_json: string | null;
       cardio_json: string | null;
       cardio_blocks_json: string | null;
+      blockId: string | null;
+      blockType: WeekType | null;
+      blockStartDate: string | null;
+      blockEndDate: string | null;
     }>(
       `SELECT 
         w.id,
@@ -531,6 +700,10 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
         w.notes AS notas,
         w.duration_seconds AS duracionSegundos,
         w.session_focus AS sessionFocusJson,
+        tb.id AS blockId,
+        tb.type AS blockType,
+        tb.start_date AS blockStartDate,
+        tb.end_date AS blockEndDate,
         (
           SELECT json_group_array(
             json_object(
@@ -590,10 +763,11 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
             )
           )
           FROM cardio_blocks cb
-          WHERE cb.workout_id = w.id OR cb.session_id = w.id
+          WHERE cb.workout_id = w.id
         ) AS cardio_blocks_json
       FROM workouts w
-      ORDER BY w.date DESC, w.id DESC
+      LEFT JOIN training_blocks tb ON tb.id = w.block_id
+      ORDER BY COALESCE(tb.start_date, w.date) DESC, w.date DESC, w.id DESC
       LIMIT ? OFFSET ?;`,
       [limit, offset],
     );
@@ -687,6 +861,17 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
         ejercicios,
         cardio,
         cardioBlocks,
+        ...(row.blockId && row.blockType && row.blockStartDate && row.blockEndDate
+          ? {
+              blockId: row.blockId,
+              block: {
+                id: row.blockId,
+                type: row.blockType,
+                startDate: row.blockStartDate,
+                endDate: row.blockEndDate,
+              },
+            }
+          : {}),
       };
     });
   } catch (error) {
@@ -737,6 +922,28 @@ export async function getMonthlyCardioDistance(year: number, month: number): Pro
 }
 
 export async function eliminarSesion(id: string): Promise<void> {
+  await deleteWorkoutById(id);
+}
+
+/**
+ * Elimina un entrenamiento y todos sus registros dependientes.
+ * `exercise_logs`, `cardio_logs` y `cardio_blocks` declaran ON DELETE CASCADE sobre `workouts`
+ * (con `PRAGMA foreign_keys = ON`). Aun así se borran explícitamente dentro de una transacción
+ * para no dejar huérfanos en bases de datos antiguas donde la cascada no estuviera activa.
+ */
+export async function deleteWorkoutById(id: string): Promise<void> {
   const db = await getDatabase();
-  await db.runAsync('DELETE FROM workouts WHERE client_id = ?;', [id]);
+  const numericId = /^\d+$/.test(id) ? Number(id) : -1;
+  const workout = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
+    [id, numericId],
+  );
+  if (!workout) return;
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM exercise_logs WHERE workout_id = ?;', [workout.id]);
+    await db.runAsync('DELETE FROM cardio_logs WHERE workout_id = ?;', [workout.id]);
+    await db.runAsync('DELETE FROM cardio_blocks WHERE workout_id = ?;', [workout.id]);
+    await db.runAsync('DELETE FROM workouts WHERE id = ?;', [workout.id]);
+  });
 }

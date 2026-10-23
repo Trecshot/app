@@ -3,6 +3,16 @@ export * from './types/workout';
 
 export type WeekType = 'carga' | 'descarga';
 
+/** Periodo cronológico fijo de 7 días, independiente del número de sesiones realizadas. */
+export interface TrainingBlock {
+  id: string;
+  type: WeekType;
+  /** ISO 8601 (inclusive). */
+  startDate: string;
+  /** ISO 8601 (exclusive): startDate + 7 días. */
+  endDate: string;
+}
+
 export interface Workout {
   id?: number;
   clientId?: string;
@@ -12,6 +22,7 @@ export interface Workout {
   notes?: string;
   durationSeconds?: number;
   sessionFocus?: MuscleGroup[];
+  blockId?: string;
 }
 
 export interface ExerciseLog {
@@ -87,4 +98,6 @@ export interface SesionEntrenamiento {
   ejercicios: Ejercicio[];
   cardio: Cardio | null;
   cardioBlocks?: CardioBlock[];
+  blockId?: string;
+  block?: TrainingBlock;
 }

@@ -1,14 +1,75 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, SectionList } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { FlashList } from '@shopify/flash-list';
 import { Dumbbell } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
-import { WorkoutHistoryCard } from '../../src/components/workout/WorkoutHistoryCard';
-import { useWorkoutHistory } from '../../src/hooks/useWorkoutHistory';
+import { WorkoutHistoryCard, type WorkoutHistoryCardProps } from '../../src/components/workout/WorkoutHistoryCard';
+import { useWorkoutHistory, type WorkoutBlockSection } from '../../src/hooks/useWorkoutHistory';
+import type { SesionEntrenamiento } from '../../types';
+
+// Mapear un registro de SQLite a las props de la tarjeta del historial
+function toCardProps(session: SesionEntrenamiento): WorkoutHistoryCardProps & { id: string } {
+  const totalMinutes = Math.floor(session.duracionSegundos / 60);
+  const remainingSeconds = session.duracionSegundos % 60;
+  const durationStr =
+    totalMinutes > 0
+      ? `${totalMinutes} min`
+      : `${remainingSeconds} s`;
+
+  const totalVolumeKg = session.ejercicios.reduce((accEx, ex) => {
+    return (
+      accEx +
+      ex.series.reduce((accSet, s) => accSet + (s.reps || 0) * (s.pesoKg || 0), 0)
+    );
+  }, 0);
+
+  const titleStr =
+    session.ejercicios.length > 0
+      ? session.ejercicios.map((e) => e.nombre).filter(Boolean).join(', ')
+      : 'Entrenamiento';
+
+  const exercisesSummary = session.ejercicios.map(
+    (e) => `${e.nombre || 'Ejercicio'} (${e.series.length} ${e.series.length === 1 ? 'serie' : 'series'})`,
+  );
+
+  const focusStr =
+    session.sessionFocus && session.sessionFocus.length > 0
+      ? session.sessionFocus.join(', ')
+      : undefined;
+
+  const cardioData = session.cardioBlocks && session.cardioBlocks.length > 0
+    ? session.cardioBlocks
+    : session.cardio
+    ? [
+        {
+          id: 'legacy-cardio',
+          type: (session.cardio.modalidad === 'Trotar'
+            ? 'Trote'
+            : session.cardio.modalidad === 'Cuerda'
+            ? 'Salto en cuerda'
+            : 'Trote') as any,
+          minutos: session.cardio.tiempoMin,
+          kilometros: session.cardio.distanciaKm,
+          velocidad: session.cardio.velocidadNivel,
+        },
+      ]
+    : [];
+
+  return {
+    id: session.id,
+    title: titleStr,
+    focus: focusStr,
+    date: session.fecha,
+    duration: durationStr,
+    volume: `${Math.round(totalVolumeKg)} kg`,
+    prs: 0,
+    exercises: exercisesSummary,
+    cardio: cardioData,
+  };
+}
 
 export default function HistoryScreen() {
-  const { history, loading, refreshHistory } = useWorkoutHistory();
+  const { sections, loading, refreshHistory, deleteWorkout } = useWorkoutHistory();
 
   // Actualizar el historial cada vez que la pantalla gana el foco
   useFocusEffect(
@@ -16,67 +77,6 @@ export default function HistoryScreen() {
       void refreshHistory();
     }, [refreshHistory]),
   );
-
-  // Mapear los registros de SQLite para las tarjetas del historial
-  const historyData = history.map((session) => {
-    const totalMinutes = Math.floor(session.duracionSegundos / 60);
-    const remainingSeconds = session.duracionSegundos % 60;
-    const durationStr =
-      totalMinutes > 0
-        ? `${totalMinutes} min`
-        : `${remainingSeconds} s`;
-
-    const totalVolumeKg = session.ejercicios.reduce((accEx, ex) => {
-      return (
-        accEx +
-        ex.series.reduce((accSet, s) => accSet + (s.reps || 0) * (s.pesoKg || 0), 0)
-      );
-    }, 0);
-
-    const titleStr =
-      session.ejercicios.length > 0
-        ? session.ejercicios.map((e) => e.nombre).filter(Boolean).join(', ')
-        : 'Entrenamiento';
-
-    const exercisesSummary = session.ejercicios.map(
-      (e) => `${e.nombre || 'Ejercicio'} (${e.series.length} ${e.series.length === 1 ? 'serie' : 'series'})`,
-    );
-
-    const focusStr =
-      session.sessionFocus && session.sessionFocus.length > 0
-        ? session.sessionFocus.join(', ')
-        : undefined;
-
-    const cardioData = session.cardioBlocks && session.cardioBlocks.length > 0
-      ? session.cardioBlocks
-      : session.cardio
-      ? [
-          {
-            id: 'legacy-cardio',
-            type: (session.cardio.modalidad === 'Trotar'
-              ? 'Trote'
-              : session.cardio.modalidad === 'Cuerda'
-              ? 'Salto en cuerda'
-              : 'Trote') as any,
-            minutos: session.cardio.tiempoMin,
-            kilometros: session.cardio.distanciaKm,
-            velocidad: session.cardio.velocidadNivel,
-          },
-        ]
-      : [];
-
-    return {
-      id: session.id,
-      title: titleStr,
-      focus: focusStr,
-      date: session.fecha,
-      duration: durationStr,
-      volume: `${Math.round(totalVolumeKg)} kg`,
-      prs: 0,
-      exercises: exercisesSummary,
-      cardio: cardioData,
-    };
-  });
 
   // Componente visual que se muestra solo cuando no hay datos
   const renderEmptyState = () => (
@@ -91,6 +91,19 @@ export default function HistoryScreen() {
     </View>
   );
 
+  const renderSectionHeader = ({ section }: { section: WorkoutBlockSection }) => {
+    const isCarga = section.block?.type === 'carga';
+    return (
+      <View style={styles.sectionHeader}>
+        <View style={[styles.sectionAccent, { backgroundColor: isCarga ? COLORS.primary : COLORS.primaryDark }]} />
+        <Text style={styles.sectionTitle} numberOfLines={1}>{section.title}</Text>
+        <Text style={styles.sectionCount}>
+          {section.sessionCount} {section.sessionCount === 1 ? 'sesión' : 'sesiones'}
+        </Text>
+      </View>
+    );
+  };
+
   return (
     <View style={GLOBAL_STYLES.container}>
       {/* Header Superior */}
@@ -99,15 +112,19 @@ export default function HistoryScreen() {
         <Text style={styles.headerTitle}>Historial</Text>
       </View>
 
-      {/* Lista de alto rendimiento */}
+      {/* Lista agrupada por bloques de 7 días */}
       <View style={styles.listContainer}>
-        {loading && historyData.length === 0 ? (
+        {loading && sections.length === 0 ? (
           <ActivityIndicator style={{ marginTop: 60 }} color={COLORS.primaryDark} />
         ) : (
-          <FlashList
-            data={historyData}
-            renderItem={({ item }) => <WorkoutHistoryCard {...item} />}
+          <SectionList<SesionEntrenamiento, WorkoutBlockSection>
+            sections={sections as WorkoutBlockSection[]}
             keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <WorkoutHistoryCard {...toCardProps(item)} onDelete={() => deleteWorkout(item.id)} />
+            )}
+            renderSectionHeader={renderSectionHeader}
+            stickySectionHeadersEnabled
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={renderEmptyState}
@@ -144,6 +161,35 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingBottom: SPACING.xl,
     paddingTop: SPACING.xs,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.background,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  sectionAccent: {
+    width: 4,
+    height: 18,
+    borderRadius: 2,
+  },
+  sectionTitle: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  sectionCount: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+    backgroundColor: COLORS.surfaceHighlight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
 
   // Estilos específicos para el Estado Vacío

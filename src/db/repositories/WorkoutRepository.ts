@@ -1,17 +1,28 @@
 import * as Crypto from 'expo-crypto';
 import {
-  eliminarSesion,
+  createTrainingBlock,
+  deleteWorkoutById,
+  findTrainingBlockForDate,
   getCardioBlocksByWorkoutId,
   getDatabase,
   getIsoWeekNumber,
+  getLatestTrainingBlock,
   getMonthlyCardioDistance,
   getWeeklySummary,
   getWorkoutDetails,
   guardarSesion,
   initDatabase,
   obtenerSesiones,
+  updateTrainingBlockType,
 } from '../../../database';
-import type { CardioBlock, SesionEntrenamiento, WeeklySummary, WorkoutDetails } from '../../../types';
+import type {
+  CardioBlock,
+  SesionEntrenamiento,
+  TrainingBlock,
+  WeekType,
+  WeeklySummary,
+  WorkoutDetails,
+} from '../../../types';
 
 export interface SetRecord {
   exerciseName: string;
@@ -195,12 +206,13 @@ export class WorkoutRepository {
       })),
     );
 
+    // El cardio ya quedó guardado y ligado a `workouts` por guardarSesion();
+    // no se duplica en la tabla de tiempos `session`.
     await WorkoutRepository.saveFullWorkout(
       startTime,
       endTime,
       sesion.duracionSegundos,
       granularSets,
-      sesion.cardioBlocks,
     );
   }
 
@@ -225,7 +237,33 @@ export class WorkoutRepository {
   }
 
   static async deleteSession(workoutId: string): Promise<void> {
-    await eliminarSesion(workoutId);
+    await WorkoutRepository.deleteWorkoutById(workoutId);
+  }
+
+  /**
+   * Elimina un entrenamiento (DELETE FROM workouts WHERE id = ?) junto con sus series y cardio.
+   * Se ejecuta en una transacción; las FK con ON DELETE CASCADE actúan como respaldo.
+   */
+  static async deleteWorkoutById(id: string): Promise<void> {
+    await deleteWorkoutById(id);
+  }
+
+  // ─── Bloques de entrenamiento (7 días) ─────────────────────────────────────
+
+  static async getLatestBlock(): Promise<TrainingBlock | null> {
+    return getLatestTrainingBlock();
+  }
+
+  static async findBlockForDate(date: Date = new Date()): Promise<TrainingBlock | null> {
+    return findTrainingBlockForDate(date);
+  }
+
+  static async createBlock(type: WeekType): Promise<TrainingBlock> {
+    return createTrainingBlock(type);
+  }
+
+  static async updateBlockType(blockId: string, type: WeekType): Promise<void> {
+    await updateTrainingBlockType(blockId, type);
   }
 
   static getIsoWeekNumber(dateValue: string): number {

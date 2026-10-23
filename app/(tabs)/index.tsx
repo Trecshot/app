@@ -17,7 +17,8 @@ import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
 import { CardioCard } from '../../src/components/workout/CardioCard';
 import { WorkoutSummaryModal } from '../../src/components/workout/WorkoutSummaryModal';
 import { useWorkoutStore } from '../../src/store/useWorkoutStore';
-import { useSessionStore } from '../../src/store/useSessionStore';
+import { useSessionStore, isBlockExpired } from '../../src/store/useSessionStore';
+import { BlockIndicator } from '../../src/components/workout/BlockIndicator';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import { clearDraft } from '../../src/storage/workoutDraft';
 import type { CardioBlock, Ejercicio, MuscleGroup, SesionEntrenamiento, WorkoutExerciseBlock } from '../../types';
@@ -42,6 +43,7 @@ export default function ActiveWorkoutScreen() {
     endSession,
     getElapsedSeconds,
     startTimestamp,
+    currentBlock,
   } = useSessionStore();
 
   const [isSaving, setIsSaving] = useState(false);
@@ -159,11 +161,16 @@ export default function ActiveWorkoutScreen() {
           };
         });
 
+      // La sesión hereda tipo (carga/descarga) del bloque vigente de 7 días
+      const activeBlock =
+        currentBlock && !isBlockExpired(currentBlock) ? currentBlock : null;
+
       const session: SesionEntrenamiento = {
         id: Crypto.randomUUID(),
         fecha: todayDate,
         duracionSegundos: elapsedSeconds,
-        tipoSemana: 'carga',
+        tipoSemana: activeBlock?.type ?? 'carga',
+        blockId: activeBlock?.id,
         cycleWeek: WorkoutRepository.getIsoWeekNumber(todayDate),
         sessionFocus: activeFocus.length > 0 ? activeFocus : undefined,
         ejercicios: validExercises,
@@ -173,6 +180,10 @@ export default function ActiveWorkoutScreen() {
 
       await WorkoutRepository.saveSession(session, startTimestamp);
       await clearDraft();
+      if (!activeBlock) {
+        // El bloque expiró durante la sesión: pedir la nueva semana
+        void useSessionStore.getState().initBlock();
+      }
     } catch (error) {
       console.error('Error al guardar sesión:', error);
       Alert.alert(
@@ -197,6 +208,7 @@ export default function ActiveWorkoutScreen() {
           <View>
             <Text style={styles.headerSubtitle}>MI ENTRENAMIENTO</Text>
             <Text style={styles.headerTitle}>Entrena con intención.</Text>
+            <BlockIndicator />
           </View>
           <View style={styles.headerIcons}>
             <TouchableOpacity style={styles.iconButton}>
