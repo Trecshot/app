@@ -13,9 +13,14 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
 let prRuleV7Applied = false;
 let cardioFkFixed = false;
+let catalogSyncedCount = 0;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) {
+    if (catalogSyncedCount !== EXERCISE_CATALOG.length) {
+      catalogSyncedCount = EXERCISE_CATALOG.length;
+      await seedExerciseCatalog(dbInstance).catch(() => undefined);
+    }
     if (!cardioFkFixed) {
       cardioFkFixed = true;
       await migrateFixCardioBlocksForeignKey(dbInstance).catch(() => undefined);
@@ -130,6 +135,7 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await migrateNumericTypesAndPRColumns(db);
     cardioFkFixed = true;
     prRuleV7Applied = true;
+    catalogSyncedCount = EXERCISE_CATALOG.length;
     dbInstance = db;
     return db;
   } catch (error) {
