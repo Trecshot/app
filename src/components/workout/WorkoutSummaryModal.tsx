@@ -24,8 +24,6 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onNavigateToHistory: () => void;
-  onSaveSession?: () => Promise<void> | void;
-  saveSession?: () => Promise<void> | void;
   resetSession?: () => void;
   durationSeconds?: number;
   session?: {
@@ -40,8 +38,6 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
   visible,
   onClose,
   onNavigateToHistory,
-  onSaveSession,
-  saveSession: saveSessionProp,
   resetSession: resetSessionProp,
   durationSeconds,
   session: sessionProp,
@@ -127,14 +123,6 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
     return `${remainingSeconds}s`;
   }, [durationSeconds, getElapsedSeconds]);
 
-  const saveSession = () => {
-    if (saveSessionProp) {
-      void saveSessionProp();
-    } else if (onSaveSession) {
-      void onSaveSession();
-    }
-  };
-
   const resetSession = () => {
     if (resetSessionProp) {
       resetSessionProp();
@@ -145,20 +133,16 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
   };
 
   const handleFinish = () => {
-    // 1. Ejecutar persistencia de datos (Transacción SQLite)
-    // Esto asegura que la sesión se guarde independientemente de lo que ocurra en la UI.
-    saveSession();
-
-    // 2. Ocultar el componente Modal visualmente
-    // Se invoca el cambio de estado local (visible = false)
     onClose();
-
-    // 3. Diferir la mutación destructiva y la navegación
-    // Se otorga un margen (ej. 300ms - 500ms) para que la animación nativa de cierre del Modal finalice.
     setTimeout(() => {
-      resetSession(); // Destrucción segura del estado en memoria
-      onNavigateToHistory(); // Transición de pantalla sin colisiones nativas
+      resetSession();
+      onNavigateToHistory();
     }, 400);
+  };
+
+  const handleClose = () => {
+    resetSession();
+    onClose();
   };
 
   return (
@@ -254,7 +238,7 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
                   styles.secondaryButton,
                   pressed && styles.buttonPressed,
                 ]}
-                onPress={onClose}
+                onPress={handleClose}
               >
                 <Text style={styles.secondaryButtonText}>Cerrar</Text>
               </Pressable>

@@ -20,31 +20,27 @@ import { useWorkoutStore } from '../../src/store/useWorkoutStore';
 import { useSessionStore, isBlockExpired } from '../../src/store/useSessionStore';
 import { BlockIndicator } from '../../src/components/workout/BlockIndicator';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
-import { clearDraft } from '../../src/storage/workoutDraft';
 import type { CardioBlock, Ejercicio, MuscleGroup, SesionEntrenamiento, WorkoutExerciseBlock } from '../../types';
 import { MUSCLE_GROUPS, getCatalogExerciseName } from '../../types';
 
 export default function ActiveWorkoutScreen() {
-  const {
-    sessionFocus,
-    toggleSessionFocus,
-    exercises,
-    addExercise,
-    cardio,
-    addCardioBlock,
-    updateCardioBlock,
-    removeCardioBlock,
-    resetWorkout,
-  } = useWorkoutStore();
-  const {
-    isActive,
-    isRunning,
-    toggleSession,
-    endSession,
-    getElapsedSeconds,
-    startTimestamp,
-    currentBlock,
-  } = useSessionStore();
+  const sessionFocus = useWorkoutStore((s) => s.sessionFocus);
+  const toggleSessionFocus = useWorkoutStore((s) => s.toggleSessionFocus);
+  const exercises = useWorkoutStore((s) => s.exercises);
+  const addExercise = useWorkoutStore((s) => s.addExercise);
+  const cardio = useWorkoutStore((s) => s.cardio);
+  const addCardioBlock = useWorkoutStore((s) => s.addCardioBlock);
+  const updateCardioBlock = useWorkoutStore((s) => s.updateCardioBlock);
+  const removeCardioBlock = useWorkoutStore((s) => s.removeCardioBlock);
+  const resetWorkout = useWorkoutStore((s) => s.resetWorkout);
+
+  const isActive = useSessionStore((s) => s.isActive);
+  const isRunning = useSessionStore((s) => s.isRunning);
+  const toggleSession = useSessionStore((s) => s.toggleSession);
+  const endSession = useSessionStore((s) => s.endSession);
+  const getElapsedSeconds = useSessionStore((s) => s.getElapsedSeconds);
+  const startTimestamp = useSessionStore((s) => s.startTimestamp);
+  const currentBlock = useSessionStore((s) => s.currentBlock);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);
@@ -101,12 +97,38 @@ export default function ActiveWorkoutScreen() {
       return;
     }
 
+    // Normalizar ejercicios: filtrar series válidas (reps > 0 o isCompleted === true)
+    // y marcarlas como isCompleted: true
+    const normalizedExercises: WorkoutExerciseBlock[] = exercises
+      .map((ex) => ({
+        ...ex,
+        sets: ex.sets
+          .filter((s) => (parseInt(s.reps, 10) || 0) > 0 || s.isCompleted)
+          .map((s) => ({
+            ...s,
+            isCompleted: true,
+          })),
+      }))
+      .filter(
+        (ex) =>
+          ex.sets.length > 0 &&
+          (Boolean(ex.catalogExerciseId) || Boolean(ex.name && ex.name.trim().length > 0)),
+      );
+
+    if (normalizedExercises.length === 0) {
+      Alert.alert(
+        'Sin series válidas',
+        'Debes registrar al menos una serie con repeticiones mayores a 0 para finalizar el entrenamiento.',
+      );
+      return;
+    }
+
     // 1. Snapshot inmutable de la sesión para el Modal (Optimistic Rendering)
     const currentDuration = getElapsedSeconds();
     const sessionSnapshot = {
       sessionFocus: [...sessionFocus],
-      exercises: JSON.parse(JSON.stringify(exercises)),
-      cardio: JSON.parse(JSON.stringify(cardio)),
+      exercises: normalizedExercises,
+      cardio: JSON.parse(JSON.stringify(cardio || [])),
       durationSeconds: currentDuration,
     };
     setModalSummary(sessionSnapshot);
@@ -136,6 +158,7 @@ export default function ActiveWorkoutScreen() {
       const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       // Mapear y validar ejercicios con resolución de integridad referencial
+      // Persistir en SQLite únicamente series con reps > 0 (o isCompleted === true), descartando series vacías
       const validExercises: Ejercicio[] = activeExercises
         .filter(
           (ex) =>
@@ -147,19 +170,24 @@ export default function ActiveWorkoutScreen() {
             ex.catalogExerciseId,
             ex.name,
           );
+          const validSets = ex.sets
+            .filter((s) => (parseInt(s.reps, 10) || 0) > 0 || s.isCompleted)
+            .map((s) => ({
+              id: s.id,
+              reps: parseInt(s.reps, 10) || 0,
+              pesoKg: parseFloat(s.weight) || 0,
+            }));
+
           return {
             id: ex.id,
             catalogExerciseId: ex.catalogExerciseId || undefined,
             nombre: resolvedName,
             grupoMuscular: ex.selectedMuscleGroup || 'General',
             selectedMuscleGroup: ex.selectedMuscleGroup,
-            series: ex.sets.map((s) => ({
-              id: s.id,
-              reps: parseInt(s.reps, 10) || 0,
-              pesoKg: parseFloat(s.weight) || 0,
-            })),
+            series: validSets,
           };
-        });
+        })
+        .filter((ex) => ex.series.length > 0);
 
       // La sesión hereda tipo (carga/descarga) del bloque vigente de 7 días
       const activeBlock =
@@ -179,7 +207,6 @@ export default function ActiveWorkoutScreen() {
       };
 
       await WorkoutRepository.saveSession(session, startTimestamp);
-      await clearDraft();
       if (!activeBlock) {
         // El bloque expiró durante la sesión: pedir la nueva semana
         void useSessionStore.getState().initBlock();
@@ -382,13 +409,15 @@ export default function ActiveWorkoutScreen() {
       {/* Modal de resumen de finalización */}
       <WorkoutSummaryModal
         visible={isSummaryModalVisible}
-        onClose={() => setIsSummaryModalVisible(false)}
+        onClose={() => {
+          resetActiveSession();
+          setIsSummaryModalVisible(false);
+        }}
         session={modalSummary ?? { sessionFocus, exercises, cardio }}
         durationSeconds={modalSummary?.durationSeconds}
-        saveSession={() => {}}
-        onSaveSession={() => {}}
         resetSession={resetActiveSession}
         onNavigateToHistory={() => {
+          resetActiveSession();
           setIsSummaryModalVisible(false);
           router.navigate('/history');
         }}

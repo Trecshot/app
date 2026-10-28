@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { X, PlusCircle, ChevronDown, Dumbbell, Tag, Lock, CheckCheck } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../theme';
@@ -20,18 +20,13 @@ interface ExerciseCardProps {
   exercise: WorkoutExerciseBlock;
 }
 
-export const ExerciseCard = ({ exerciseIndex, exercise }: ExerciseCardProps) => {
-  const {
-    sessionFocus,
-    addSet,
-    removeSet,
-    updateSet,
-    toggleSetComplete,
-    completeAllSetsInBlock,
-    removeExercise,
-    selectExercise,
-    updateMuscleGroup,
-  } = useWorkoutStore();
+const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) => {
+  const sessionFocus = useWorkoutStore((s) => s.sessionFocus);
+  const addSet = useWorkoutStore((s) => s.addSet);
+  const completeAllSetsInBlock = useWorkoutStore((s) => s.completeAllSetsInBlock);
+  const removeExercise = useWorkoutStore((s) => s.removeExercise);
+  const selectExercise = useWorkoutStore((s) => s.selectExercise);
+  const updateMuscleGroup = useWorkoutStore((s) => s.updateMuscleGroup);
 
   const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
   const [isExerciseSheetOpen, setIsExerciseSheetOpen] = useState(false);
@@ -200,14 +195,12 @@ export const ExerciseCard = ({ exerciseIndex, exercise }: ExerciseCardProps) => 
       {exercise.sets.map((set, index) => (
         <SetRow
           key={set.id}
+          exerciseId={exercise.id}
+          setId={set.id}
           setNumber={index + 1}
           reps={set.reps}
           weight={set.weight}
           isCompleted={set.isCompleted}
-          onChangeReps={(val) => updateSet(exercise.id, set.id, 'reps', val)}
-          onChangeWeight={(val) => updateSet(exercise.id, set.id, 'weight', val)}
-          onToggleComplete={() => toggleSetComplete(exercise.id, set.id)}
-          onDelete={() => removeSet(exercise.id, set.id)}
         />
       ))}
 
@@ -246,6 +239,8 @@ export const ExerciseCard = ({ exerciseIndex, exercise }: ExerciseCardProps) => 
     </View>
   );
 };
+
+export const ExerciseCard = memo(ExerciseCardComponent);
 
 const styles = StyleSheet.create({
   header: {

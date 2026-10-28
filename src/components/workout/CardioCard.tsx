@@ -1,5 +1,5 @@
 // src/components/workout/CardioCard.tsx
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import { Flame, X } from 'lucide-react-native';
 import { CardioBlock, CardioType } from '../../../types/workout';
@@ -13,7 +13,7 @@ interface Props {
   onRemove: () => void;
 }
 
-export const CardioCard: React.FC<Props> = ({ cardio, onUpdate, onRemove }) => {
+const CardioCardComponent: React.FC<Props> = ({ cardio, onUpdate, onRemove }) => {
   return (
     <View style={styles.card}>
       {/* Header con Selector de Tipo e Ícono de Eliminar */}
@@ -130,6 +130,8 @@ export const CardioCard: React.FC<Props> = ({ cardio, onUpdate, onRemove }) => {
     </View>
   );
 };
+
+export const CardioCard = memo(CardioCardComponent);
 
 const styles = StyleSheet.create({
   card: {

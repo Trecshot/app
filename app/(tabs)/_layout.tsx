@@ -1,17 +1,17 @@
 import { Tabs } from 'expo-router';
 import { Dumbbell, History } from 'lucide-react-native';
-import { c } from '../../src/theme';
+import { COLORS } from '../../src/theme';
 
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: c.ink,
-        tabBarInactiveTintColor: c.muted,
+        tabBarActiveTintColor: COLORS.textPrimary,
+        tabBarInactiveTintColor: COLORS.textSecondary,
         tabBarStyle: {
-          backgroundColor: c.white,
-          borderTopColor: c.line,
+          backgroundColor: COLORS.surface,
+          borderTopColor: COLORS.border,
           borderTopWidth: 1,
           height: 64,
           paddingBottom: 8,

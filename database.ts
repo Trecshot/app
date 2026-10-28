@@ -80,32 +80,16 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         duration_minutes REAL NOT NULL,
         FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE
       );
-      CREATE TABLE IF NOT EXISTS session (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        start_time INTEGER NOT NULL,
-        end_time INTEGER,
-        total_duration_seconds INTEGER
-      );
-      CREATE TABLE IF NOT EXISTS set_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        session_id INTEGER,
-        exercise_name TEXT,
-        weight_kg REAL,
-        reps INTEGER,
-        FOREIGN KEY(session_id) REFERENCES session(id) ON DELETE CASCADE
-      );
       CREATE TABLE IF NOT EXISTS cardio_blocks (
         id TEXT PRIMARY KEY,
         workout_id INTEGER,
-        session_id INTEGER,
         cardio_type TEXT NOT NULL,
         minutos REAL NOT NULL,
         velocidad REAL,
         kilometros REAL,
         saltos INTEGER,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE,
-        FOREIGN KEY (session_id) REFERENCES session (id) ON DELETE CASCADE
+        FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE
       );
     `);
     await seedExerciseCatalog(db);
@@ -117,6 +101,7 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await migrateLegacySessions(db);
     await migrateTrainingBlocks(db);
     await migrateDuplicatedSessionCardio(db);
+    await migrateDropLegacySessionTables(db);
     dbInstance = db;
     return db;
   } catch (error) {
@@ -348,6 +333,20 @@ async function migrateDuplicatedSessionCardio(db: SQLite.SQLiteDatabase): Promis
   await db.execAsync(`
     DELETE FROM cardio_blocks WHERE workout_id IS NULL;
     PRAGMA user_version = 4;
+  `);
+}
+
+/**
+ * Migración v5: elimina las tablas huérfanas `session` y `set_log`.
+ */
+async function migrateDropLegacySessionTables(db: SQLite.SQLiteDatabase): Promise<void> {
+  const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+  if ((version?.user_version ?? 0) >= 5) return;
+
+  await db.execAsync(`
+    DROP TABLE IF EXISTS set_log;
+    DROP TABLE IF EXISTS session;
+    PRAGMA user_version = 5;
   `);
 }
 

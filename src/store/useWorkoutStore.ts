@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { createJSONStorage, persist, StateStorage } from 'zustand/middleware';
 import {
   CatalogExercise,
   getCatalogExerciseById,
@@ -16,13 +16,32 @@ export type { WorkoutExerciseBlock, WorkoutSet };
 // Alias para compatibilidad hacia atrás
 export type WorkoutExercise = WorkoutExerciseBlock;
 
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+export const debouncedAsyncStorage: StateStorage = {
+  getItem: async (name: string): Promise<string | null> => {
+    return await AsyncStorage.getItem(name);
+  },
+  setItem: (name: string, value: string): void => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      void AsyncStorage.setItem(name, value);
+    }, 400);
+  },
+  removeItem: async (name: string): Promise<void> => {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+    await AsyncStorage.removeItem(name);
+  },
+};
+
 export interface WorkoutStore {
   sessionFocus: MuscleGroup[];
   exercises: WorkoutExerciseBlock[];
   cardio: CardioBlock[];
-  session?: {
-    cardio: CardioBlock[];
-  };
 
   // Acciones de Enfoque de Sesión
   setSessionFocus: (focus: MuscleGroup[]) => void;
@@ -52,8 +71,8 @@ export interface WorkoutStore {
   resetWorkout: () => void;
 }
 
-// Generador de IDs únicos cortos
-const generateId = () => Math.random().toString(36).substring(2, 9);
+// Generador de IDs únicos criptográficamente seguros
+const generateId = () => Crypto.randomUUID();
 
 export const useWorkoutStore = create<WorkoutStore>()(
   persist(
@@ -61,9 +80,6 @@ export const useWorkoutStore = create<WorkoutStore>()(
       sessionFocus: [],
       exercises: [],
       cardio: [],
-      session: {
-        cardio: [],
-      },
 
       setSessionFocus: (focus: MuscleGroup[]) => set({ sessionFocus: focus }),
 
@@ -212,59 +228,35 @@ export const useWorkoutStore = create<WorkoutStore>()(
 
       // Acciones de Cardio
       addCardioBlock: () =>
-        set((state) => {
-          const newCardio: CardioBlock[] = [
+        set((state) => ({
+          cardio: [
             ...(state.cardio || []),
             { id: Crypto.randomUUID(), type: 'Trote', minutos: 0 },
-          ];
-          return {
-            cardio: newCardio,
-            session: {
-              ...(state.session || {}),
-              cardio: newCardio,
-            },
-          };
-        }),
+          ],
+        })),
 
       updateCardioBlock: (id, field, value) =>
-        set((state) => {
-          const newCardio = (state.cardio || []).map((item) =>
+        set((state) => ({
+          cardio: (state.cardio || []).map((item) =>
             item.id === id ? { ...item, [field]: value } : item,
-          );
-          return {
-            cardio: newCardio,
-            session: {
-              ...(state.session || {}),
-              cardio: newCardio,
-            },
-          };
-        }),
+          ),
+        })),
 
       removeCardioBlock: (id) =>
-        set((state) => {
-          const newCardio = (state.cardio || []).filter((item) => item.id !== id);
-          return {
-            cardio: newCardio,
-            session: {
-              ...(state.session || {}),
-              cardio: newCardio,
-            },
-          };
-        }),
+        set((state) => ({
+          cardio: (state.cardio || []).filter((item) => item.id !== id),
+        })),
 
       resetWorkout: () =>
         set({
           sessionFocus: [],
           exercises: [],
           cardio: [],
-          session: {
-            cardio: [],
-          },
         }),
     }),
     {
       name: 'workout-exercises-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => debouncedAsyncStorage),
     },
   ),
 );
