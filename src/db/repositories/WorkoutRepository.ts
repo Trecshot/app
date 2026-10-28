@@ -286,10 +286,10 @@ export class WorkoutRepository {
   static async deleteWorkoutById(id: string): Promise<void> {
     const db = await getDatabase();
 
-    // Determinamos si el ID es un número o un identificador de texto (UUID)
+    // Normalizamos el ID por si llega como texto (UUID) o número
     const numericId = /^\d+$/.test(id) ? Number(id) : -1;
 
-    // Buscamos primero el id interno real de la tabla workouts
+    // Obtenemos el ID numérico interno de la tabla workouts
     const workout = await db.getFirstAsync<{ id: number }>(
       'SELECT id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
       [String(id), numericId],
@@ -300,7 +300,7 @@ export class WorkoutRepository {
       return;
     }
 
-    // Ejecutamos el borrado dentro de una transacción blindada de SQLite
+    // Transacción atómica blindada para evitar bloqueos de llaves foráneas
     await db.withTransactionAsync(async () => {
       await db.runAsync('DELETE FROM exercise_logs WHERE workout_id = ?;', [workout.id]);
       await db.runAsync('DELETE FROM cardio_logs WHERE workout_id = ?;', [workout.id]);

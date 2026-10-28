@@ -1,7 +1,7 @@
-import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, SectionList } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, SectionList, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { Dumbbell } from 'lucide-react-native';
+import { Dumbbell, ChevronDown } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { WorkoutHistoryCard, type WorkoutHistoryCardProps } from '../../src/components/workout/WorkoutHistoryCard';
 import { useWorkoutHistory, type WorkoutBlockSection } from '../../src/hooks/useWorkoutHistory';
@@ -88,6 +88,11 @@ function toCardProps(session: SesionEntrenamiento): WorkoutHistoryCardProps & { 
 
 export default function HistoryScreen() {
   const { sections, loading, refreshHistory, deleteWorkout } = useWorkoutHistory();
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+
+  const toggleSection = (key: string) => {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Actualizar el historial cada vez que la pantalla gana el foco
   useFocusEffect(
@@ -111,17 +116,26 @@ export default function HistoryScreen() {
 
   const renderSectionHeader = ({ section }: { section: WorkoutBlockSection }) => {
     const isCarga = section.block?.type === 'carga';
-    const targetSessions = section.block?.targetSessions ?? 7;
+    const isCollapsed = collapsedSections[section.key] ?? false;
+
     return (
-      <View style={styles.sectionHeader}>
+      <TouchableOpacity
+        style={styles.sectionHeader}
+        onPress={() => toggleSection(section.key)}
+        activeOpacity={0.8}
+      >
         <View style={[styles.sectionAccent, { backgroundColor: isCarga ? COLORS.primary : COLORS.primaryDark }]} />
         <Text style={styles.sectionTitle} numberOfLines={1}>{section.title}</Text>
         <Text style={styles.sectionCount}>
-          {section.block
-            ? `${section.sessionCount}/${targetSessions} sesiones`
-            : `${section.sessionCount} ${section.sessionCount === 1 ? 'sesión' : 'sesiones'}`}
+          {section.sessionCount} {section.sessionCount === 1 ? 'sesión' : 'sesiones'}
         </Text>
-      </View>
+        {/* Icono de flecha para indicar que es desplegable */}
+        <ChevronDown
+          size={18}
+          color={COLORS.textSecondary}
+          style={{ transform: [{ rotate: isCollapsed ? '-90deg' : '0deg' }], marginLeft: 4 }}
+        />
+      </TouchableOpacity>
     );
   };
 
@@ -139,7 +153,10 @@ export default function HistoryScreen() {
           <ActivityIndicator style={{ marginTop: 60 }} color={COLORS.primaryDark} />
         ) : (
           <SectionList<SesionEntrenamiento, WorkoutBlockSection>
-            sections={sections as WorkoutBlockSection[]}
+            sections={sections.map((sec) => ({
+              ...sec,
+              data: collapsedSections[sec.key] ? [] : sec.data, // Oculta las tarjetas si está contraído
+            }))}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <WorkoutHistoryCard {...toCardProps(item)} onDelete={() => deleteWorkout(item.id)} />

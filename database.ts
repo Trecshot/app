@@ -12,9 +12,14 @@ import {
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
 let prRuleV7Applied = false;
+let cardioFkFixed = false;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (dbInstance) {
+    if (!cardioFkFixed) {
+      cardioFkFixed = true;
+      await migrateFixCardioBlocksForeignKey(dbInstance).catch(() => undefined);
+    }
     if (!prRuleV7Applied) {
       prRuleV7Applied = true;
       await migrateNumericTypesAndPRColumns(dbInstance).catch(() => undefined);
@@ -120,8 +125,11 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await migrateTrainingBlocks(db);
     await migrateDuplicatedSessionCardio(db);
     await migrateDropLegacySessionTables(db);
+    await migrateFixCardioBlocksForeignKey(db);
     await migrateTrainingBlocksSessionCounter(db);
     await migrateNumericTypesAndPRColumns(db);
+    cardioFkFixed = true;
+    prRuleV7Applied = true;
     dbInstance = db;
     return db;
   } catch (error) {
@@ -370,6 +378,42 @@ async function migrateDropLegacySessionTables(db: SQLite.SQLiteDatabase): Promis
     DROP TABLE IF EXISTS set_log;
     DROP TABLE IF EXISTS session;
     PRAGMA user_version = 5;
+  `);
+}
+
+/**
+ * Reconstruye `cardio_blocks` si su esquema heredado aún declara
+ * `FOREIGN KEY (session_id) REFERENCES session (id)`, lo cual bloqueaba el borrado
+ * tras haberse eliminado la tabla `session`.
+ */
+async function migrateFixCardioBlocksForeignKey(db: SQLite.SQLiteDatabase): Promise<void> {
+  const tableInfo = await db.getFirstAsync<{ sql: string }>(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'cardio_blocks';",
+  );
+  if (!tableInfo?.sql || !tableInfo.sql.includes('session')) {
+    return;
+  }
+
+  await db.execAsync(`
+    PRAGMA foreign_keys = OFF;
+    CREATE TABLE IF NOT EXISTS cardio_blocks_clean (
+      id TEXT PRIMARY KEY,
+      workout_id INTEGER,
+      cardio_type TEXT NOT NULL,
+      minutos REAL NOT NULL,
+      velocidad REAL,
+      kilometros REAL,
+      saltos INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE
+    );
+    INSERT OR IGNORE INTO cardio_blocks_clean (id, workout_id, cardio_type, minutos, velocidad, kilometros, saltos, created_at)
+    SELECT id, workout_id, cardio_type, minutos, velocidad, kilometros, saltos, created_at
+    FROM cardio_blocks
+    WHERE workout_id IS NOT NULL;
+    DROP TABLE cardio_blocks;
+    ALTER TABLE cardio_blocks_clean RENAME TO cardio_blocks;
+    PRAGMA foreign_keys = ON;
   `);
 }
 
@@ -1284,10 +1328,10 @@ export async function eliminarSesion(id: string): Promise<void> {
 export async function deleteWorkoutById(id: string): Promise<void> {
   const db = await getDatabase();
 
-  // Determinamos si el ID es un número o un identificador de texto (UUID)
+  // Normalizamos el ID por si llega como texto (UUID) o número
   const numericId = /^\d+$/.test(id) ? Number(id) : -1;
 
-  // Buscamos primero el id interno real de la tabla workouts
+  // Obtenemos el ID numérico interno de la tabla workouts
   const workout = await db.getFirstAsync<{ id: number }>(
     'SELECT id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
     [String(id), numericId],
@@ -1298,7 +1342,7 @@ export async function deleteWorkoutById(id: string): Promise<void> {
     return;
   }
 
-  // Ejecutamos el borrado dentro de una transacción blindada de SQLite
+  // Transacción atómica blindada para evitar bloqueos de llaves foráneas
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM exercise_logs WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM cardio_logs WHERE workout_id = ?;', [workout.id]);
