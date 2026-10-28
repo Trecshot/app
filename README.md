@@ -115,23 +115,3 @@ npx eas-cli@latest build -p android --profile production
 # 4. Publicar actualizaciones Over-The-Air (OTA)
 npx eas-cli@latest update --branch production
 ```
-
----
-
-## 7. Cómo funciona la persistencia y la base de datos
-
-- **Inicialización Temprana:** La base local `gym_tracker.db` se inicializa y migra antes de ocultar el Splash Screen (`app/_layout.tsx`), evitando condiciones de carrera en la interfaz.
-- **Borrador de seguridad:** Mientras entrenas, los cambios se respaldan automáticamente en segundo plano. Si sales de la app o se apaga la pantalla, tu sesión no se pierde.
-- **Cálculo de semanas:** La semana del ciclo se calcula de forma automática según el estándar ISO de la fecha del entrenamiento.
-- **Rendimiento:** Las listas del historial utilizan renderizado virtualizado con `FlatList` y componentes memoizados para mantener 60 FPS estables incluso con cientos de registros.
-
----
-
-## Problemas frecuentes
-
-- **`node` o `npm` no se reconoce:** Cierra y vuelve a abrir VS Code después de instalar Node.js, o actualiza la variable `$env:Path` en tu terminal actual.
-- **Error de ejecución de scripts en PowerShell:** Ejecuta `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned -Force`.
-- **El teléfono no se conecta al código QR:** Comprueba que el teléfono y el PC compartan la misma red Wi-Fi. Si la red tiene aislamiento de clientes (habitual en redes universitarias o públicas), utiliza el modo túnel con `npx expo start --tunnel`.
-- **Puerto 8081 en uso:** Si otra aplicación o proceso ocupa el puerto, inicia en otro puerto con `npx expo start --port 8082`.
-- **Caché corrupta o cambios que no se reflejan:** Inicia limpiando la caché de Metro con `npx expo start -c`.
-- **Desincronización de dependencias:** Ejecuta `npx expo install --fix` y luego `npm run doctor` para diagnosticar la configuración.
