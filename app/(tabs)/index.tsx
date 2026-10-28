@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -10,14 +11,18 @@ import {
 } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { Settings, Maximize, RotateCcw } from 'lucide-react-native';
+import { Settings, Maximize, RotateCcw, Info } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { TimerDisplay } from '../../src/components/workout/TimerDisplay';
 import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
 import { CardioCard } from '../../src/components/workout/CardioCard';
 import { WorkoutSummaryModal } from '../../src/components/workout/WorkoutSummaryModal';
 import { useWorkoutStore } from '../../src/store/useWorkoutStore';
-import { useSessionStore, isBlockExpired } from '../../src/store/useSessionStore';
+import {
+  BLOCK_TARGET_SESSIONS,
+  useSessionStore,
+  isBlockExpired,
+} from '../../src/store/useSessionStore';
 import { BlockIndicator } from '../../src/components/workout/BlockIndicator';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import type { CardioBlock, Ejercicio, MuscleGroup, SesionEntrenamiento, WorkoutExerciseBlock } from '../../types';
@@ -32,6 +37,8 @@ export default function ActiveWorkoutScreen() {
   const addCardioBlock = useWorkoutStore((s) => s.addCardioBlock);
   const updateCardioBlock = useWorkoutStore((s) => s.updateCardioBlock);
   const removeCardioBlock = useWorkoutStore((s) => s.removeCardioBlock);
+  const notes = useWorkoutStore((s) => s.notes);
+  const setNotes = useWorkoutStore((s) => s.setNotes);
   const resetWorkout = useWorkoutStore((s) => s.resetWorkout);
 
   const isActive = useSessionStore((s) => s.isActive);
@@ -41,6 +48,7 @@ export default function ActiveWorkoutScreen() {
   const getElapsedSeconds = useSessionStore((s) => s.getElapsedSeconds);
   const startTimestamp = useSessionStore((s) => s.startTimestamp);
   const currentBlock = useSessionStore((s) => s.currentBlock);
+  const startNewBlock = useSessionStore((s) => s.startNewBlock);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);
@@ -49,6 +57,8 @@ export default function ActiveWorkoutScreen() {
     exercises: WorkoutExerciseBlock[];
     cardio: CardioBlock[];
     durationSeconds: number;
+    notes?: string;
+    prs?: number;
   } | null>(null);
 
   const timerStatus = isRunning
@@ -97,13 +107,17 @@ export default function ActiveWorkoutScreen() {
       return;
     }
 
-    // Normalizar ejercicios: filtrar series válidas (reps > 0 o isCompleted === true)
+    // Normalizar ejercicios: filtrar estrictamente series válidas (reps > 0 y peso >= 0)
     // y marcarlas como isCompleted: true
     const normalizedExercises: WorkoutExerciseBlock[] = exercises
       .map((ex) => ({
         ...ex,
         sets: ex.sets
-          .filter((s) => (parseInt(s.reps, 10) || 0) > 0 || s.isCompleted)
+          .filter((s) => {
+            const reps = parseInt(s.reps, 10) || 0;
+            const weight = s.weight === '' ? 0 : parseFloat(s.weight);
+            return reps > 0 && Number.isFinite(weight) && weight >= 0;
+          })
           .map((s) => ({
             ...s,
             isCompleted: true,
@@ -125,11 +139,13 @@ export default function ActiveWorkoutScreen() {
 
     // 1. Snapshot inmutable de la sesión para el Modal (Optimistic Rendering)
     const currentDuration = getElapsedSeconds();
+    const trimmedNotes = notes.trim();
     const sessionSnapshot = {
       sessionFocus: [...sessionFocus],
       exercises: normalizedExercises,
       cardio: JSON.parse(JSON.stringify(cardio || [])),
       durationSeconds: currentDuration,
+      notes: trimmedNotes || undefined,
     };
     setModalSummary(sessionSnapshot);
 
@@ -147,18 +163,20 @@ export default function ActiveWorkoutScreen() {
     exercises: WorkoutExerciseBlock[];
     cardio: CardioBlock[];
     durationSeconds: number;
+    notes?: string;
   }) => {
     try {
       setIsSaving(true);
       const activeExercises = snapshot ? snapshot.exercises : exercises;
       const activeCardio = snapshot ? snapshot.cardio : cardio;
       const activeFocus = snapshot ? snapshot.sessionFocus : sessionFocus;
+      const activeNotes = snapshot ? snapshot.notes : notes;
       const elapsedSeconds = snapshot ? snapshot.durationSeconds : getElapsedSeconds();
       const now = new Date();
       const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
       // Mapear y validar ejercicios con resolución de integridad referencial
-      // Persistir en SQLite únicamente series con reps > 0 (o isCompleted === true), descartando series vacías
+      // Persistir en SQLite únicamente series válidas con reps > 0 y peso >= 0
       const validExercises: Ejercicio[] = activeExercises
         .filter(
           (ex) =>
@@ -171,11 +189,15 @@ export default function ActiveWorkoutScreen() {
             ex.name,
           );
           const validSets = ex.sets
-            .filter((s) => (parseInt(s.reps, 10) || 0) > 0 || s.isCompleted)
+            .filter((s) => {
+              const reps = parseInt(s.reps, 10) || 0;
+              const weight = s.weight === '' ? 0 : parseFloat(s.weight);
+              return reps > 0 && Number.isFinite(weight) && weight >= 0;
+            })
             .map((s) => ({
               id: s.id,
               reps: parseInt(s.reps, 10) || 0,
-              pesoKg: parseFloat(s.weight) || 0,
+              pesoKg: Math.max(0, parseFloat(s.weight) || 0),
             }));
 
           return {
@@ -189,15 +211,16 @@ export default function ActiveWorkoutScreen() {
         })
         .filter((ex) => ex.series.length > 0);
 
-      // La sesión hereda tipo (carga/descarga) del bloque vigente de 7 días
+      // La sesión hereda tipo (carga/descarga) del bloque vigente de 7 sesiones
       const activeBlock =
         currentBlock && !isBlockExpired(currentBlock) ? currentBlock : null;
 
       const session: SesionEntrenamiento = {
         id: Crypto.randomUUID(),
         fecha: todayDate,
+        notas: activeNotes?.trim() ? activeNotes.trim() : undefined,
         duracionSegundos: elapsedSeconds,
-        tipoSemana: activeBlock?.type ?? 'carga',
+        tipoSemana: activeBlock?.type ?? currentBlock?.type ?? 'carga',
         blockId: activeBlock?.id,
         cycleWeek: WorkoutRepository.getIsoWeekNumber(todayDate),
         sessionFocus: activeFocus.length > 0 ? activeFocus : undefined,
@@ -206,11 +229,16 @@ export default function ActiveWorkoutScreen() {
         cardioBlocks: activeCardio && activeCardio.length > 0 ? activeCardio : undefined,
       };
 
+      // Calcular PRs Absolutos frente al historial antes de insertar en SQLite
+      const achievedPrs = await WorkoutRepository.calculateSessionPRsCount(
+        activeExercises,
+        session.tipoSemana,
+      );
+      setModalSummary((prev) => (prev ? { ...prev, prs: achievedPrs } : prev));
+
       await WorkoutRepository.saveSession(session, startTimestamp);
-      if (!activeBlock) {
-        // El bloque expiró durante la sesión: pedir la nueva semana
-        void useSessionStore.getState().initBlock();
-      }
+      // Actualizar contador de sesiones (1/7..7/7) y evaluar sugerencia de descarga al llegar a 7/7
+      await useSessionStore.getState().initBlock();
     } catch (error) {
       console.error('Error al guardar sesión:', error);
       Alert.alert(
@@ -246,6 +274,40 @@ export default function ActiveWorkoutScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Banner informativo no bloqueante al completar 7/7 sesiones de Sobrecarga */}
+        {currentBlock &&
+          currentBlock.type === 'carga' &&
+          (currentBlock.sessionCount ?? 0) >=
+            (currentBlock.targetSessions ?? BLOCK_TARGET_SESSIONS) && (
+            <View style={styles.deloadBanner}>
+              <View style={styles.deloadBannerHeader}>
+                <Info size={18} color={COLORS.timerSurface} />
+                <Text style={styles.deloadBannerTitle}>
+                  ¡7/7 sesiones de Sobrecarga completadas!
+                </Text>
+              </View>
+              <Text style={styles.deloadBannerText}>
+                Se recomienda transicionar hacia una semana de Descarga para optimizar tu recuperación, aunque puedes encadenar otra semana de sobrecarga si lo prefieres.
+              </Text>
+              <View style={styles.deloadBannerActions}>
+                <TouchableOpacity
+                  style={styles.deloadPrimaryBtn}
+                  onPress={() => void startNewBlock('descarga')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.deloadPrimaryBtnText}>Pasar a Descarga</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deloadSecondaryBtn}
+                  onPress={() => void startNewBlock('carga')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.deloadSecondaryBtnText}>Seguir en Carga</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
         {/* Tarjeta Oscura del Cronómetro */}
         <View style={styles.timerCard}>
@@ -385,6 +447,28 @@ export default function ActiveWorkoutScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Notas de Contexto de la Sesión (Punto 8) */}
+        <View style={styles.notesSection}>
+          <View style={styles.focusHeaderRow}>
+            <Text style={styles.focusTitle}>NOTAS DE CONTEXTO DE LA SESIÓN</Text>
+            {notes.length > 0 && (
+              <TouchableOpacity onPress={() => setNotes('')}>
+                <Text style={styles.focusClearText}>Limpiar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <TextInput
+            style={styles.notesInput}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Ej. Sensación de fatiga alta, buen bombeo, falta de sueño..."
+            placeholderTextColor={COLORS.textSecondary}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+        </View>
+
         {/* Botón Finalizar Entrenamiento */}
         <TouchableOpacity
           style={[
@@ -413,7 +497,7 @@ export default function ActiveWorkoutScreen() {
           resetActiveSession();
           setIsSummaryModalVisible(false);
         }}
-        session={modalSummary ?? { sessionFocus, exercises, cardio }}
+        session={modalSummary ?? { sessionFocus, exercises, cardio, notes }}
         durationSeconds={modalSummary?.durationSeconds}
         resetSession={resetActiveSession}
         onNavigateToHistory={() => {
@@ -430,6 +514,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: SPACING.md,
     paddingTop: 50,
+    paddingBottom: 100, // Vital para que los botones inferiores no queden detrás de la barra inferior
   },
   topHeader: {
     flexDirection: 'row',
@@ -566,5 +651,75 @@ const styles = StyleSheet.create({
   focusChipTextActive: {
     color: COLORS.timerSurface,
     fontWeight: '700',
+  },
+  deloadBanner: {
+    backgroundColor: 'rgba(193, 225, 79, 0.22)',
+    borderWidth: 1,
+    borderColor: COLORS.primaryDark,
+    borderRadius: 16,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+  },
+  deloadBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  deloadBannerTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: '800',
+    flex: 1,
+  },
+  deloadBannerText: {
+    color: COLORS.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: SPACING.sm,
+  },
+  deloadBannerActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  deloadPrimaryBtn: {
+    flex: 1,
+    backgroundColor: COLORS.timerSurface,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  deloadPrimaryBtnText: {
+    color: COLORS.textInverted,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  deloadSecondaryBtn: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  deloadSecondaryBtnText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  notesSection: {
+    marginTop: SPACING.lg,
+  },
+  notesInput: {
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    padding: SPACING.md,
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    minHeight: 88,
+    lineHeight: 21,
   },
 });

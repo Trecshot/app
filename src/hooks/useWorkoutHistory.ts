@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import { WorkoutRepository } from '../db/repositories/WorkoutRepository';
+import { formatBlockStartDate, useSessionStore } from '../store/useSessionStore';
 import type { SesionEntrenamiento, TrainingBlock, WeeklySummary } from '../../types';
 
 export interface WorkoutBlockSection {
-  /** Ej: "Semana de Carga (12/10 al 19/10)" */
+  /** Ej: "Semana de Carga · Iniciado el 23 de octubre" */
   title: string;
   /** Sesiones pertenecientes al bloque */
   data: SesionEntrenamiento[];
@@ -15,15 +16,11 @@ export interface WorkoutBlockSection {
   block?: TrainingBlock;
 }
 
-function formatDayMonth(iso: string): string {
-  const date = new Date(iso);
-  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
 export function getBlockSectionTitle(block?: TrainingBlock): string {
   if (!block) return 'Sin bloque asignado';
   const label = block.type === 'carga' ? 'Carga' : 'Descarga';
-  return `Semana de ${label} (${formatDayMonth(block.startDate)} al ${formatDayMonth(block.endDate)})`;
+  const initiated = formatBlockStartDate(block.startDate);
+  return initiated ? `Semana de ${label} · ${initiated}` : `Semana de ${label}`;
 }
 
 /**
@@ -88,6 +85,7 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
       await WorkoutRepository.deleteWorkoutById(workoutId);
       setHistory((items) => items.filter((item) => item.id !== workoutId));
       setWeeklySummary(await WorkoutRepository.getWeeklySummary());
+      await useSessionStore.getState().initBlock();
     } catch {
       Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo.');
     }

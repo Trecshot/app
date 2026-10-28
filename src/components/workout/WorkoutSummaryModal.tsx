@@ -76,7 +76,7 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
     return { totalMin, totalKm };
   }, [cardioList]);
 
-  // 2. Cálculos de datos derivados (Selectors blindados con useMemo)
+  // 2. Cálculos de datos derivados: filtra estrictamente series válidas (reps > 0 y peso >= 0)
   const sessionExercises = session?.exercises;
   const stats = useMemo(() => {
     let volume = 0;
@@ -88,20 +88,49 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
     list.forEach((ex: WorkoutExerciseBlock) => {
       ex?.sets?.forEach((set: WorkoutSet) => {
         totalSets++;
-        if (set?.isCompleted) {
+        const rawReps =
+          typeof set?.reps === 'number'
+            ? set.reps
+            : parseFloat(String(set?.reps ?? '').trim());
+        const rawWeight =
+          set?.weight === '' || set?.weight === undefined || set?.weight === null
+            ? 0
+            : typeof set.weight === 'number'
+            ? set.weight
+            : parseFloat(String(set.weight).trim());
+
+        const isValidSet =
+          Number.isFinite(rawReps) &&
+          rawReps > 0 &&
+          Number.isFinite(rawWeight) &&
+          rawWeight >= 0;
+
+        if (isValidSet) {
           completedSets++;
-          const reps = parseFloat(String(set?.reps ?? 0)) || 0;
-          const weight = parseFloat(String(set?.weight ?? 0)) || 0;
-          volume += reps * weight;
+          volume += rawReps * rawWeight;
         }
       });
     });
 
+    const validExerciseCount = list.filter((ex) =>
+      ex?.sets?.some((s) => {
+        const r =
+          typeof s?.reps === 'number' ? s.reps : parseFloat(String(s?.reps ?? '').trim());
+        const w =
+          s?.weight === '' || s?.weight === undefined || s?.weight === null
+            ? 0
+            : typeof s.weight === 'number'
+            ? s.weight
+            : parseFloat(String(s.weight).trim());
+        return Number.isFinite(r) && r > 0 && Number.isFinite(w) && w >= 0;
+      }),
+    ).length;
+
     return {
       volume: Math.round(volume),
       completedSets,
-      totalSets,
-      exerciseCount: list.length,
+      totalSets: Math.max(totalSets, completedSets),
+      exerciseCount: validExerciseCount > 0 ? validExerciseCount : list.length,
     };
   }, [sessionExercises, exercises]);
 
@@ -158,15 +187,22 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
               <Text style={styles.headerKicker}>RESUMEN DE SESIÓN</Text>
               <Text style={styles.headerTitle}>¡Entrenamiento completado!</Text>
 
-              {/* Renderizado dinámico de los enfoques (sessionFocus) */}
-              {(session?.sessionFocus?.length ?? 0) > 0 && (
+              {/* Renderizado dinámico de los enfoques (sessionFocus) y PRs Absolutos */}
+              {((session?.sessionFocus?.length ?? 0) > 0 || (session?.prs ?? 0) > 0) && (
                 <View style={styles.focusTagsContainer}>
-                  {/* El operador '?' evita el crash si 'session' es null durante el desmontaje */}
                   {session?.sessionFocus?.map((focus) => (
                     <View key={focus} style={styles.focusTag}>
                       <Text style={styles.focusTagText}>{focus}</Text>
                     </View>
                   ))}
+                  {(session?.prs ?? 0) > 0 && (
+                    <View style={styles.prBannerTag}>
+                      <Trophy size={13} color="#FBBF24" />
+                      <Text style={styles.prBannerTagText}>
+                        {session?.prs} {session?.prs === 1 ? 'PR Absoluto' : 'PRs Absolutos'}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -334,6 +370,23 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontSize: 12,
     fontWeight: '700',
+  },
+  prBannerTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.6)',
+    backgroundColor: 'rgba(251, 191, 36, 0.16)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
+  prBannerTagText: {
+    color: '#FBBF24',
+    fontSize: 12,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'],
   },
   statsGrid: {
     flexDirection: 'row',

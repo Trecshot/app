@@ -42,10 +42,12 @@ export interface WorkoutStore {
   sessionFocus: MuscleGroup[];
   exercises: WorkoutExerciseBlock[];
   cardio: CardioBlock[];
+  notes: string;
 
-  // Acciones de Enfoque de Sesión
+  // Acciones de Enfoque de Sesión y Notas
   setSessionFocus: (focus: MuscleGroup[]) => void;
   toggleSessionFocus: (group: MuscleGroup) => void;
+  setNotes: (notes: string) => void;
 
   // Acciones de Ejercicio
   addExercise: (catalogExerciseId?: string, muscleGroup?: MuscleGroup) => void;
@@ -80,8 +82,11 @@ export const useWorkoutStore = create<WorkoutStore>()(
       sessionFocus: [],
       exercises: [],
       cardio: [],
+      notes: '',
 
       setSessionFocus: (focus: MuscleGroup[]) => set({ sessionFocus: focus }),
+
+      setNotes: (notes: string) => set({ notes }),
 
       toggleSessionFocus: (group: MuscleGroup) =>
         set((state) => {
@@ -252,6 +257,7 @@ export const useWorkoutStore = create<WorkoutStore>()(
           sessionFocus: [],
           exercises: [],
           cardio: [],
+          notes: '',
         }),
     }),
     {

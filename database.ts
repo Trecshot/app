@@ -2,12 +2,25 @@ import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
 import type { Cardio, CardioBlock, CardioLog, CardioType, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, TrainingBlock, WeekType, WeeklySummary, Workout, WorkoutDetails } from './types';
 import { EXERCISE_CATALOG } from './types';
+import {
+  evaluateSessionPRs,
+  getExerciseRecordKey,
+  toStrictIntegerReps,
+  toStrictRealWeight,
+} from './src/utils/prEngine';
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
+let prRuleV7Applied = false;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (dbInstance) return dbInstance;
+  if (dbInstance) {
+    if (!prRuleV7Applied) {
+      prRuleV7Applied = true;
+      await migrateNumericTypesAndPRColumns(dbInstance).catch(() => undefined);
+    }
+    return dbInstance;
+  }
   if (!dbInitialization) {
     dbInitialization = initializeDatabase();
     void dbInitialization.catch(() => { dbInitialization = null; });
@@ -42,7 +55,9 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL CHECK (type IN ('carga', 'descarga')),
         start_date TEXT NOT NULL,
-        end_date TEXT NOT NULL
+        end_date TEXT NOT NULL,
+        sessions_count INTEGER NOT NULL DEFAULT 0,
+        target_sessions INTEGER NOT NULL DEFAULT 7
       );
       CREATE INDEX IF NOT EXISTS idx_training_blocks_start ON training_blocks (start_date);
       CREATE TABLE IF NOT EXISTS workouts (
@@ -54,7 +69,8 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         notes TEXT,
         duration_seconds INTEGER NOT NULL DEFAULT 0,
         session_focus TEXT,
-        block_id TEXT REFERENCES training_blocks (id) ON DELETE SET NULL
+        block_id TEXT REFERENCES training_blocks (id) ON DELETE SET NULL,
+        prs_count INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS exercise_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,11 +82,13 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         muscle_group TEXT NOT NULL DEFAULT 'General',
         set_id TEXT NOT NULL,
         set_number INTEGER NOT NULL,
-        reps INTEGER NOT NULL,
-        weight REAL NOT NULL,
+        reps INTEGER NOT NULL,      -- Forzado a INTEGER
+        weight REAL NOT NULL,       -- Forzado a REAL (Evita ordenamiento alfabético con MAX)
+        is_pr INTEGER NOT NULL DEFAULT 0,
         FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE,
         UNIQUE (workout_id, exercise_id, set_number)
       );
+      CREATE INDEX IF NOT EXISTS idx_exercise_logs_catalog_weight ON exercise_logs (catalog_exercise_id, weight);
       CREATE TABLE IF NOT EXISTS cardio_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workout_id INTEGER NOT NULL UNIQUE,
@@ -102,6 +120,8 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await migrateTrainingBlocks(db);
     await migrateDuplicatedSessionCardio(db);
     await migrateDropLegacySessionTables(db);
+    await migrateTrainingBlocksSessionCounter(db);
+    await migrateNumericTypesAndPRColumns(db);
     dbInstance = db;
     return db;
   } catch (error) {
@@ -252,7 +272,10 @@ async function migrateLegacySessions(db: SQLite.SQLiteDatabase): Promise<void> {
   });
 }
 
-/** Duración fija de un bloque de entrenamiento (7 días naturales). */
+/** Meta de sesiones efectivas por bloque de entrenamiento (7 sesiones). */
+export const TRAINING_BLOCK_SESSIONS = 7;
+
+/** Duración referencial de un bloque de entrenamiento (7 días). */
 export const TRAINING_BLOCK_DAYS = 7;
 
 /** Medianoche local del día de `date`. */
@@ -350,38 +373,232 @@ async function migrateDropLegacySessionTables(db: SQLite.SQLiteDatabase): Promis
   `);
 }
 
+/**
+ * Migración v6: añade `sessions_count` y `target_sessions` a `training_blocks`
+ * para contabilizar bloques por 7 sesiones efectivas completadas.
+ */
+async function migrateTrainingBlocksSessionCounter(db: SQLite.SQLiteDatabase): Promise<void> {
+  const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(training_blocks);');
+  if (!columns.some((col) => col.name === 'sessions_count')) {
+    await db.execAsync(
+      'ALTER TABLE training_blocks ADD COLUMN sessions_count INTEGER NOT NULL DEFAULT 0;',
+    );
+  }
+  if (!columns.some((col) => col.name === 'target_sessions')) {
+    await db.execAsync(
+      'ALTER TABLE training_blocks ADD COLUMN target_sessions INTEGER NOT NULL DEFAULT 7;',
+    );
+  }
+  await db.execAsync(`
+    UPDATE training_blocks
+    SET sessions_count = (
+      SELECT COUNT(*) FROM workouts WHERE workouts.block_id = training_blocks.id
+    );
+  `);
+}
+
+/**
+ * Migración v7 (Punto 6): Blindaje de afinidad numérica en `exercise_logs` (reps INTEGER, weight REAL)
+ * y columnas de persistencia de Récords Personales Absolutos (`is_pr` y `prs_count`).
+ */
+async function migrateNumericTypesAndPRColumns(db: SQLite.SQLiteDatabase): Promise<void> {
+  const workoutColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(workouts);');
+  if (!workoutColumns.some((col) => col.name === 'prs_count')) {
+    await db.execAsync('ALTER TABLE workouts ADD COLUMN prs_count INTEGER NOT NULL DEFAULT 0;');
+  }
+
+  const logColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(exercise_logs);');
+  if (!logColumns.some((col) => col.name === 'is_pr')) {
+    await db.execAsync('ALTER TABLE exercise_logs ADD COLUMN is_pr INTEGER NOT NULL DEFAULT 0;');
+  }
+
+  await db.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_exercise_logs_catalog_weight
+    ON exercise_logs (catalog_exercise_id, weight);
+  `);
+
+  const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+  if ((version?.user_version ?? 0) >= 7) return;
+
+  // Forzar conversión a INTEGER y REAL sobre registros preexistentes y recalcular PRs históricos
+  await db.execAsync(`
+    UPDATE exercise_logs
+    SET reps = CAST(reps AS INTEGER),
+        weight = CAST(weight AS REAL);
+  `);
+  await recalculateAllHistoricalPRs(db);
+  await db.execAsync('PRAGMA user_version = 7;');
+}
+
+/**
+ * Consulta agregada en SQLite usando `MAX(CAST(weight AS REAL))` para obtener
+ * las marcas personales históricas (PR Absoluto) por `catalog_exercise_id`.
+ */
+export async function getHistoricalMaxWeights(
+  customDb?: SQLite.SQLiteDatabase,
+  excludeWorkoutId?: number,
+): Promise<Record<string, number>> {
+  const db = customDb ?? (await getDatabase());
+  const rows = await db.getAllAsync<{
+    catalogExerciseId: string | null;
+    exerciseName: string;
+    maxWeight: number;
+  }>(
+    `SELECT
+       catalog_exercise_id AS catalogExerciseId,
+       exercise_name AS exerciseName,
+       MAX(CAST(weight AS REAL)) AS maxWeight
+     FROM exercise_logs
+     WHERE CAST(reps AS INTEGER) > 0
+       AND CAST(weight AS REAL) > 0
+       AND (? IS NULL OR workout_id != ?)
+     GROUP BY COALESCE(NULLIF(catalog_exercise_id, ''), LOWER(TRIM(exercise_name)));`,
+    [excludeWorkoutId ?? null, excludeWorkoutId ?? null],
+  );
+
+  const map: Record<string, number> = {};
+  for (const row of rows) {
+    const key = getExerciseRecordKey(row.catalogExerciseId, row.exerciseName);
+    if (key) {
+      map[key] = toStrictRealWeight(row.maxWeight);
+    }
+  }
+  return map;
+}
+
+/**
+ * Recalcula cronológicamente los PRs Absolutos en la base de datos.
+ */
+export async function recalculateAllHistoricalPRs(
+  customDb?: SQLite.SQLiteDatabase,
+): Promise<void> {
+  const db = customDb ?? (await getDatabase());
+  const workouts = await db.getAllAsync<{ id: number; week_type: WeekType }>(
+    'SELECT id, week_type FROM workouts ORDER BY date ASC, id ASC;',
+  );
+
+  await db.runAsync('UPDATE exercise_logs SET is_pr = 0;');
+  await db.runAsync('UPDATE workouts SET prs_count = 0;');
+
+  const runningMaxByKey: Record<string, number> = {};
+
+  for (const workout of workouts) {
+    const logs = await db.getAllAsync<{
+      id: number;
+      exercise_id: string;
+      catalog_exercise_id: string | null;
+      exercise_name: string;
+      muscle_group: string;
+      set_id: string;
+      set_number: number;
+      reps: number;
+      weight: number;
+    }>(
+      `SELECT id, exercise_id, catalog_exercise_id, exercise_name, muscle_group,
+              set_id, set_number, CAST(reps AS INTEGER) AS reps, CAST(weight AS REAL) AS weight
+       FROM exercise_logs
+       WHERE workout_id = ?
+       ORDER BY exercise_order ASC, set_number ASC;`,
+      [workout.id],
+    );
+
+    if (logs.length === 0) continue;
+
+    // Agrupar por exercise_id preservando el orden
+    const exercisesMap = new Map<string, Ejercicio>();
+    for (const log of logs) {
+      const existing = exercisesMap.get(log.exercise_id);
+      if (existing) {
+        existing.series.push({
+          id: log.set_id || String(log.id),
+          reps: toStrictIntegerReps(log.reps),
+          pesoKg: toStrictRealWeight(log.weight),
+        });
+      } else {
+        exercisesMap.set(log.exercise_id, {
+          id: log.exercise_id,
+          catalogExerciseId: log.catalog_exercise_id ?? undefined,
+          nombre: log.exercise_name,
+          grupoMuscular: log.muscle_group,
+          series: [
+            {
+              id: log.set_id || String(log.id),
+              reps: toStrictIntegerReps(log.reps),
+              pesoKg: toStrictRealWeight(log.weight),
+            },
+          ],
+        });
+      }
+    }
+
+    const evaluation = evaluateSessionPRs(
+      Array.from(exercisesMap.values()),
+      runningMaxByKey,
+      workout.week_type ?? 'carga',
+    );
+    Object.assign(runningMaxByKey, evaluation.updatedMaxWeightsByCatalogId);
+
+    if (evaluation.totalPrs > 0) {
+      await db.runAsync('UPDATE workouts SET prs_count = ? WHERE id = ?;', [
+        evaluation.totalPrs,
+        workout.id,
+      ]);
+
+      for (const ex of evaluation.exercises) {
+        for (const s of ex.series) {
+          if (s.isPr) {
+            await db.runAsync(
+              'UPDATE exercise_logs SET is_pr = 1 WHERE workout_id = ? AND exercise_id = ? AND set_id = ?;',
+              [workout.id, ex.id, s.id],
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
 interface TrainingBlockRow {
   id: string;
   type: WeekType;
   startDate: string;
   endDate: string;
+  sessionCount: number;
+  targetSessions: number;
 }
 
-const TRAINING_BLOCK_COLUMNS = 'id, type, start_date AS startDate, end_date AS endDate';
+const TRAINING_BLOCK_COLUMNS = `
+  id,
+  type,
+  start_date AS startDate,
+  end_date AS endDate,
+  (SELECT COUNT(*) FROM workouts w WHERE w.block_id = training_blocks.id) AS sessionCount,
+  COALESCE(target_sessions, ${TRAINING_BLOCK_SESSIONS}) AS targetSessions
+`;
 
-/** Último bloque registrado (el de fecha de inicio más reciente). */
+/** Último bloque registrado (el más reciente). */
 export async function getLatestTrainingBlock(): Promise<TrainingBlock | null> {
   const db = await getDatabase();
   const row = await db.getFirstAsync<TrainingBlockRow>(
-    `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks ORDER BY start_date DESC LIMIT 1;`,
+    `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks ORDER BY start_date DESC, rowid DESC LIMIT 1;`,
   );
   return row ?? null;
 }
 
-/** Bloque cuyo rango [start_date, end_date) contiene la fecha indicada. */
-export async function findTrainingBlockForDate(date: Date = new Date()): Promise<TrainingBlock | null> {
+/** Bloque activo vigente (con menos de 7 sesiones completadas, o el más reciente). */
+export async function findTrainingBlockForDate(_date: Date = new Date()): Promise<TrainingBlock | null> {
   const db = await getDatabase();
-  const iso = date.toISOString();
   const row = await db.getFirstAsync<TrainingBlockRow>(
-    `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks
-     WHERE start_date <= ? AND end_date > ?
-     ORDER BY start_date DESC LIMIT 1;`,
-    [iso, iso],
+    `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks ORDER BY start_date DESC, rowid DESC LIMIT 1;`,
   );
-  return row ?? null;
+  if (!row) return null;
+  if ((row.sessionCount ?? 0) >= (row.targetSessions ?? TRAINING_BLOCK_SESSIONS)) {
+    return null;
+  }
+  return row;
 }
 
-/** Crea un bloque de 7 días que comienza hoy a medianoche (hora local). */
+/** Crea un bloque de 7 sesiones efectivas que inicia hoy (Sesión 1/7). */
 export async function createTrainingBlock(type: WeekType, from: Date = new Date()): Promise<TrainingBlock> {
   const db = await getDatabase();
   const start = startOfLocalDay(from);
@@ -390,10 +607,12 @@ export async function createTrainingBlock(type: WeekType, from: Date = new Date(
     type,
     startDate: start.toISOString(),
     endDate: addLocalDays(start, TRAINING_BLOCK_DAYS).toISOString(),
+    sessionCount: 0,
+    targetSessions: TRAINING_BLOCK_SESSIONS,
   };
   await db.runAsync(
-    'INSERT INTO training_blocks (id, type, start_date, end_date) VALUES (?, ?, ?, ?);',
-    [block.id, block.type, block.startDate, block.endDate],
+    'INSERT INTO training_blocks (id, type, start_date, end_date, sessions_count, target_sessions) VALUES (?, ?, ?, ?, 0, ?);',
+    [block.id, block.type, block.startDate, block.endDate, TRAINING_BLOCK_SESSIONS],
   );
   return block;
 }
@@ -407,6 +626,7 @@ export async function updateTrainingBlockType(blockId: string, type: WeekType): 
   await db.withTransactionAsync(async () => {
     await db.runAsync('UPDATE training_blocks SET type = ? WHERE id = ?;', [type, blockId]);
     await db.runAsync('UPDATE workouts SET week_type = ? WHERE block_id = ?;', [type, blockId]);
+    await recalculateAllHistoricalPRs(db);
   });
 }
 
@@ -434,17 +654,19 @@ export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> 
       blockId: sesion.blockId,
     },
     sesion.ejercicios.flatMap((exercise, exerciseOrder) =>
-      exercise.series.map((set, setIndex) => ({
-        exerciseId: exercise.id,
-        catalogExerciseId: exercise.catalogExerciseId,
-        exerciseOrder,
-        setId: set.id,
-        exerciseName: exercise.nombre,
-        muscleGroup: exercise.grupoMuscular?.trim() || exercise.selectedMuscleGroup || 'General',
-        setNumber: setIndex + 1,
-        reps: set.reps,
-        weight: set.pesoKg,
-      })),
+      exercise.series
+        .filter((set) => Number(set.reps) > 0 && Number(set.pesoKg ?? 0) >= 0)
+        .map((set, setIndex) => ({
+          exerciseId: exercise.id,
+          catalogExerciseId: exercise.catalogExerciseId,
+          exerciseOrder,
+          setId: set.id,
+          exerciseName: exercise.nombre,
+          muscleGroup: exercise.grupoMuscular?.trim() || exercise.selectedMuscleGroup || 'General',
+          setNumber: setIndex + 1,
+          reps: Number(set.reps),
+          weight: Math.max(0, Number(set.pesoKg ?? 0)),
+        })),
     ),
     sesion.cardio
       ? {
@@ -467,51 +689,159 @@ export async function saveWorkout(
   const db = await getDatabase();
   let workoutId = 0;
   try {
-    // Hereda el bloque (carga/descarga) vigente: el indicado explícitamente o el que cubre "ahora".
-    const block = workout.blockId
-      ? await db.getFirstAsync<TrainingBlockRow>(
+    await db.withTransactionAsync(async () => {
+      // Resolver bloque de 7 sesiones dentro de la misma transacción atómica
+      let block: TrainingBlockRow | null = null;
+      if (workout.blockId) {
+        block = await db.getFirstAsync<TrainingBlockRow>(
           `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks WHERE id = ?;`,
           [workout.blockId],
-        )
-      : await findTrainingBlockForDate(new Date());
-    const weekType: WeekType = block?.type ?? workout.weekType;
+        );
+      } else {
+        block = await db.getFirstAsync<TrainingBlockRow>(
+          `SELECT ${TRAINING_BLOCK_COLUMNS} FROM training_blocks ORDER BY start_date DESC, rowid DESC LIMIT 1;`,
+        );
+      }
 
-    await db.withTransactionAsync(async () => {
-      const result = await db.runAsync(
-        `INSERT INTO workouts (client_id, date, week_type, cycle_week, notes, duration_seconds, session_focus, block_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+      // Si no hay bloque o ya alcanzó las 7/7 sesiones efectivas, crear uno nuevo automáticamente (sin bloqueo forzoso)
+      const targetSessions = block?.targetSessions ?? TRAINING_BLOCK_SESSIONS;
+      if (!block || (block.sessionCount ?? 0) >= targetSessions) {
+        const parsedWorkoutDate = parseLocalDate(workout.date);
+        const start = Number.isNaN(parsedWorkoutDate.getTime())
+          ? startOfLocalDay(new Date())
+          : startOfLocalDay(parsedWorkoutDate);
+        const newBlockId = Crypto.randomUUID();
+        const newBlockType: WeekType = block?.type ?? workout.weekType ?? 'carga';
+        const startIso = start.toISOString();
+        const endIso = addLocalDays(start, TRAINING_BLOCK_DAYS).toISOString();
+        await db.runAsync(
+          'INSERT INTO training_blocks (id, type, start_date, end_date, sessions_count, target_sessions) VALUES (?, ?, ?, ?, 0, ?);',
+          [newBlockId, newBlockType, startIso, endIso, TRAINING_BLOCK_SESSIONS],
+        );
+        block = {
+          id: newBlockId,
+          type: newBlockType,
+          startDate: startIso,
+          endDate: endIso,
+          sessionCount: 0,
+          targetSessions: TRAINING_BLOCK_SESSIONS,
+        };
+      } else if ((block.sessionCount ?? 0) === 0) {
+        // Sesión 1/7: fijar la fecha exacta de inicio del bloque a la fecha de la primera sesión
+        const parsedWorkoutDate = parseLocalDate(workout.date);
+        if (!Number.isNaN(parsedWorkoutDate.getTime())) {
+          const start = startOfLocalDay(parsedWorkoutDate);
+          const startIso = start.toISOString();
+          const endIso = addLocalDays(start, TRAINING_BLOCK_DAYS).toISOString();
+          await db.runAsync(
+            'UPDATE training_blocks SET start_date = ?, end_date = ? WHERE id = ?;',
+            [startIso, endIso, block.id],
+          );
+          block.startDate = startIso;
+          block.endDate = endIso;
+        }
+      }
+
+      const clientId = workout.clientId ?? createClientId();
+      const date = workout.date;
+      const weekType: WeekType = block?.type ?? workout.weekType;
+      const duration = workout.durationSeconds ?? 0;
+      const notes = workout.notes?.trim() ? workout.notes.trim() : null;
+      const blockId = block?.id ?? null;
+
+      // 0. Consultar marcas históricas MAX(weight) antes de insertar los nuevos exercise_logs
+      const historicalMaxWeights = await getHistoricalMaxWeights(db);
+      const validExercises = exercises.filter(
+        (ex) => toStrictIntegerReps(ex.reps) > 0 && toStrictRealWeight(ex.weight) >= 0,
+      );
+
+      // Agrupar series por ejercicio para evaluar PRs Absolutos frente al historial
+      const groupedExercises = new Map<string, Ejercicio>();
+      for (const ex of validExercises) {
+        const exId = ex.exerciseId ?? ex.exerciseName;
+        const existing = groupedExercises.get(exId);
+        if (existing) {
+          existing.series.push({
+            id: ex.setId ?? Crypto.randomUUID(),
+            reps: toStrictIntegerReps(ex.reps),
+            pesoKg: toStrictRealWeight(ex.weight),
+          });
+        } else {
+          groupedExercises.set(exId, {
+            id: exId,
+            catalogExerciseId: ex.catalogExerciseId,
+            nombre: ex.exerciseName,
+            grupoMuscular: ex.muscleGroup,
+            series: [
+              {
+                id: ex.setId ?? Crypto.randomUUID(),
+                reps: toStrictIntegerReps(ex.reps),
+                pesoKg: toStrictRealWeight(ex.weight),
+              },
+            ],
+          });
+        }
+      }
+
+      const prEvaluation = evaluateSessionPRs(
+        Array.from(groupedExercises.values()),
+        historicalMaxWeights,
+        weekType,
+      );
+      const prSetIds = new Set<string>();
+      for (const evEx of prEvaluation.exercises) {
+        for (const evSet of evEx.series) {
+          if (evSet.isPr) {
+            prSetIds.add(`${evEx.id}::${evSet.id}`);
+          }
+        }
+      }
+
+      // 1. Insertar cabecera de la sesión en 'workouts'
+      const workoutResult = await db.runAsync(
+        `INSERT INTO workouts (client_id, date, week_type, cycle_week, duration_seconds, notes, session_focus, block_id, prs_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         [
-          workout.clientId ?? createClientId(),
-          workout.date,
+          clientId,
+          date,
           weekType,
-          getIsoWeekNumber(workout.date),
-          workout.notes ?? null,
-          workout.durationSeconds ?? 0,
+          getIsoWeekNumber(date),
+          duration,
+          notes,
           workout.sessionFocus ? JSON.stringify(workout.sessionFocus) : null,
-          block?.id ?? null,
+          blockId,
+          prEvaluation.totalPrs,
         ],
       );
-      workoutId = result.lastInsertRowId;
+      workoutId = workoutResult.lastInsertRowId;
 
-      // 1. Inserción en Bloque (Bulk Insert) de series/ejercicios
-      if (exercises.length > 0) {
-        const placeholders = exercises.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
-        const values = exercises.flatMap((exercise, index) => [
-          workoutId,
-          exercise.exerciseId ?? Crypto.randomUUID(),
-          exercise.catalogExerciseId ?? null,
-          exercise.exerciseOrder ?? index,
-          exercise.exerciseName,
-          exercise.muscleGroup,
-          exercise.setId ?? Crypto.randomUUID(),
-          exercise.setNumber,
-          exercise.reps,
-          exercise.weight,
-        ]);
+      // 2. Inserción masiva (Bulk Insert) de ejercicios y series en 'exercise_logs' con tipos blindados (INTEGER y REAL)
+      if (validExercises.length > 0) {
+        const placeholders = validExercises
+          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .join(', ');
+        const values = validExercises.flatMap((exercise, index) => {
+          const exId = exercise.exerciseId ?? Crypto.randomUUID();
+          const setId = exercise.setId ?? Crypto.randomUUID();
+          const isPr = prSetIds.has(`${exId}::${setId}`) ? 1 : 0;
+          return [
+            workoutId,
+            exId,
+            exercise.catalogExerciseId ?? null,
+            exercise.exerciseOrder ?? index,
+            exercise.exerciseName,
+            exercise.muscleGroup,
+            setId,
+            exercise.setNumber,
+            toStrictIntegerReps(exercise.reps),
+            toStrictRealWeight(exercise.weight),
+            isPr,
+          ];
+        });
         await db.runAsync(
           `INSERT INTO exercise_logs (
             workout_id, exercise_id, catalog_exercise_id, exercise_order, exercise_name,
-            muscle_group, set_id, set_number, reps, weight
+            muscle_group, set_id, set_number, reps, weight, is_pr
           ) VALUES ${placeholders};`,
           values,
         );
@@ -525,24 +855,34 @@ export async function saveWorkout(
         );
       }
 
-      // 2. Inserción en Bloque (Bulk Insert) de bloques de cardio
+      // 3. Inserción de bloques de cardio en 'cardio_blocks'
       if (cardioBlocks && cardioBlocks.length > 0) {
         await db.runAsync('DELETE FROM cardio_blocks WHERE workout_id = ?;', [workoutId]);
         const placeholders = cardioBlocks.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
-        const values = cardioBlocks.flatMap((block) => [
+        const values = cardioBlocks.flatMap((cBlock) => [
           Crypto.randomUUID(),
           workoutId,
-          block.type,
-          block.minutos,
-          block.velocidad ?? null,
-          block.kilometros ?? null,
-          block.saltos ?? null,
+          cBlock.type,
+          cBlock.minutos,
+          cBlock.velocidad ?? null,
+          cBlock.kilometros ?? null,
+          cBlock.saltos ?? null,
         ]);
         await db.runAsync(
           `INSERT INTO cardio_blocks (
             id, workout_id, cardio_type, minutos, velocidad, kilometros, saltos
           ) VALUES ${placeholders};`,
           values,
+        );
+      }
+
+      // 4. Actualizar el contador de sesiones efectivas del bloque
+      if (blockId) {
+        await db.runAsync(
+          `UPDATE training_blocks
+           SET sessions_count = (SELECT COUNT(*) FROM workouts WHERE block_id = ?)
+           WHERE id = ?;`,
+          [blockId, blockId],
         );
       }
     });
@@ -689,6 +1029,9 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
       blockType: WeekType | null;
       blockStartDate: string | null;
       blockEndDate: string | null;
+      blockSessionCount: number | null;
+      blockTargetSessions: number | null;
+      prsCount: number | null;
     }>(
       `SELECT 
         w.id,
@@ -699,10 +1042,13 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
         w.notes AS notas,
         w.duration_seconds AS duracionSegundos,
         w.session_focus AS sessionFocusJson,
+        COALESCE(w.prs_count, 0) AS prsCount,
         tb.id AS blockId,
         tb.type AS blockType,
         tb.start_date AS blockStartDate,
         tb.end_date AS blockEndDate,
+        (SELECT COUNT(*) FROM workouts bw WHERE bw.block_id = tb.id) AS blockSessionCount,
+        COALESCE(tb.target_sessions, 7) AS blockTargetSessions,
         (
           SELECT json_group_array(
             json_object(
@@ -714,8 +1060,9 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
                 SELECT json_group_array(
                   json_object(
                     'id', s.set_id,
-                    'reps', s.reps,
-                    'pesoKg', s.weight
+                    'reps', CAST(s.reps AS INTEGER),
+                    'pesoKg', CAST(s.weight AS REAL),
+                    'isPr', COALESCE(s.is_pr, 0)
                   )
                 )
                 FROM exercise_logs s 
@@ -794,8 +1141,9 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
               series: Array.isArray(e.series)
                 ? e.series.map((s: any) => ({
                     id: String(s.id ?? Crypto.randomUUID()),
-                    reps: Number(s.reps ?? 0),
-                    pesoKg: Number(s.pesoKg ?? 0),
+                    reps: toStrictIntegerReps(s.reps),
+                    pesoKg: toStrictRealWeight(s.pesoKg),
+                    isPr: Boolean(s.isPr),
                   }))
                 : [],
             }));
@@ -860,6 +1208,7 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
         ejercicios,
         cardio,
         cardioBlocks,
+        prs: Number(row.prsCount ?? 0),
         ...(row.blockId && row.blockType && row.blockStartDate && row.blockEndDate
           ? {
               blockId: row.blockId,
@@ -868,6 +1217,8 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
                 type: row.blockType,
                 startDate: row.blockStartDate,
                 endDate: row.blockEndDate,
+                sessionCount: row.blockSessionCount ?? 0,
+                targetSessions: row.blockTargetSessions ?? TRAINING_BLOCK_SESSIONS,
               },
             }
           : {}),
@@ -933,8 +1284,8 @@ export async function eliminarSesion(id: string): Promise<void> {
 export async function deleteWorkoutById(id: string): Promise<void> {
   const db = await getDatabase();
   const numericId = /^\d+$/.test(id) ? Number(id) : -1;
-  const workout = await db.getFirstAsync<{ id: number }>(
-    'SELECT id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
+  const workout = await db.getFirstAsync<{ id: number; block_id: string | null }>(
+    'SELECT id, block_id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
     [id, numericId],
   );
   if (!workout) return;
@@ -944,5 +1295,14 @@ export async function deleteWorkoutById(id: string): Promise<void> {
     await db.runAsync('DELETE FROM cardio_logs WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM cardio_blocks WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM workouts WHERE id = ?;', [workout.id]);
+    if (workout.block_id) {
+      await db.runAsync(
+        `UPDATE training_blocks
+         SET sessions_count = (SELECT COUNT(*) FROM workouts WHERE block_id = ?)
+         WHERE id = ?;`,
+        [workout.block_id, workout.block_id],
+      );
+    }
+    await recalculateAllHistoricalPRs(db);
   });
 }

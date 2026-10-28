@@ -3,14 +3,18 @@ export * from './types/workout';
 
 export type WeekType = 'carga' | 'descarga';
 
-/** Periodo cronológico fijo de 7 días, independiente del número de sesiones realizadas. */
+/** Bloque de entrenamiento contabilizado por 7 sesiones efectivas completadas. */
 export interface TrainingBlock {
   id: string;
   type: WeekType;
-  /** ISO 8601 (inclusive). */
+  /** ISO 8601: fecha exacta de inicio de la Sesión 1/7. */
   startDate: string;
-  /** ISO 8601 (exclusive): startDate + 7 días. */
+  /** ISO 8601 referencial de cierre del bloque. */
   endDate: string;
+  /** Sesiones efectivas completadas dentro del bloque (0 a 7). */
+  sessionCount?: number;
+  /** Meta de sesiones efectivas del bloque (por defecto 7). */
+  targetSessions?: number;
 }
 
 export interface Workout {
@@ -23,6 +27,7 @@ export interface Workout {
   durationSeconds?: number;
   sessionFocus?: MuscleGroup[];
   blockId?: string;
+  prs?: number;
 }
 
 export interface ExerciseLog {
@@ -37,6 +42,7 @@ export interface ExerciseLog {
   setNumber: number;
   reps: number;
   weight: number;
+  isPr?: boolean;
 }
 
 export interface CardioLog {
@@ -68,6 +74,7 @@ export interface Serie {
   id: string;
   reps: number;
   pesoKg: number;
+  isPr?: boolean;
 }
 
 export interface Ejercicio {
@@ -100,4 +107,5 @@ export interface SesionEntrenamiento {
   cardioBlocks?: CardioBlock[];
   blockId?: string;
   block?: TrainingBlock;
+  prs?: number;
 }

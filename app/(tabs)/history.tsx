@@ -19,7 +19,11 @@ function toCardProps(session: SesionEntrenamiento): WorkoutHistoryCardProps & { 
   const totalVolumeKg = session.ejercicios.reduce((accEx, ex) => {
     return (
       accEx +
-      ex.series.reduce((accSet, s) => accSet + (s.reps || 0) * (s.pesoKg || 0), 0)
+      ex.series.reduce((accSet, s) => {
+        const reps = Number(s.reps) || 0;
+        const peso = Number(s.pesoKg) || 0;
+        return reps > 0 && peso >= 0 ? accSet + reps * peso : accSet;
+      }, 0)
     );
   }, 0);
 
@@ -55,6 +59,18 @@ function toCardProps(session: SesionEntrenamiento): WorkoutHistoryCardProps & { 
       ]
     : [];
 
+  const totalPrs =
+    session.tipoSemana === 'carga'
+      ? session.ejercicios.reduce(
+          (acc, ex) =>
+            acc +
+            ex.series.filter(
+              (s) => Boolean(s.isPr) && s.reps >= 1 && s.reps <= 5 && s.pesoKg > 0,
+            ).length,
+          0,
+        )
+      : 0;
+
   return {
     id: session.id,
     title: titleStr,
@@ -62,8 +78,10 @@ function toCardProps(session: SesionEntrenamiento): WorkoutHistoryCardProps & { 
     date: session.fecha,
     duration: durationStr,
     volume: `${Math.round(totalVolumeKg)} kg`,
-    prs: 0,
+    prs: totalPrs,
     exercises: exercisesSummary,
+    detailedExercises: session.ejercicios,
+    notes: session.notas,
     cardio: cardioData,
   };
 }
@@ -93,12 +111,15 @@ export default function HistoryScreen() {
 
   const renderSectionHeader = ({ section }: { section: WorkoutBlockSection }) => {
     const isCarga = section.block?.type === 'carga';
+    const targetSessions = section.block?.targetSessions ?? 7;
     return (
       <View style={styles.sectionHeader}>
         <View style={[styles.sectionAccent, { backgroundColor: isCarga ? COLORS.primary : COLORS.primaryDark }]} />
         <Text style={styles.sectionTitle} numberOfLines={1}>{section.title}</Text>
         <Text style={styles.sectionCount}>
-          {section.sessionCount} {section.sessionCount === 1 ? 'sesión' : 'sesiones'}
+          {section.block
+            ? `${section.sessionCount}/${targetSessions} sesiones`
+            : `${section.sessionCount} ${section.sessionCount === 1 ? 'sesión' : 'sesiones'}`}
         </Text>
       </View>
     );
@@ -159,7 +180,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: SPACING.md,
-    paddingBottom: SPACING.xl,
+    paddingBottom: 100,
     paddingTop: SPACING.xs,
   },
   sectionHeader: {

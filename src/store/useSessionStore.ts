@@ -12,6 +12,40 @@ import type { TrainingBlock, WeekType } from '../../types';
  */
 export type BlockStatus = 'idle' | 'active' | 'needs_new';
 
+export const BLOCK_TARGET_SESSIONS = 7;
+
+const MONTHS_ES = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+/** Formatea la fecha de inicio de la Sesión 1/7 (ej. "Iniciado el 23 de octubre"). */
+export function formatBlockStartDate(isoDate: string): string {
+  if (!isoDate) return '';
+  const datePart = isoDate.split('T')[0];
+  const parts = datePart.split('-').map(Number);
+  if (parts.length === 3 && !parts.some(Number.isNaN)) {
+    const [, month, day] = parts;
+    const monthName = MONTHS_ES[month - 1];
+    if (monthName) {
+      return `Iniciado el ${day} de ${monthName}`;
+    }
+  }
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '';
+  return `Iniciado el ${date.getDate()} de ${MONTHS_ES[date.getMonth()]}`;
+}
+
 export interface SessionState {
   isActive: boolean;
   isRunning: boolean;
@@ -23,13 +57,17 @@ export interface SessionState {
   endSession: () => void;
   getElapsedSeconds: () => number;
 
-  // Bloques de entrenamiento (fuente de verdad: SQLite, no se persisten en AsyncStorage)
+  // Bloques de entrenamiento por 7 sesiones efectivas (fuente de verdad: SQLite)
   currentBlock: TrainingBlock | null;
   lastBlock: TrainingBlock | null;
   blockStatus: BlockStatus;
-  /** Evalúa la fecha actual contra el último bloque registrado. */
+  /** Muestra el aviso no bloqueante al alcanzar la sesión 7/7 de sobrecarga. */
+  showDeloadSuggestion: boolean;
+  dismissedBlockSuggestionId: string | null;
+  dismissDeloadSuggestion: () => void;
+  /** Evalúa el último bloque registrado y su contador de sesiones (1 a 7). */
   initBlock: () => Promise<void>;
-  /** Crea un nuevo bloque de 7 días desde hoy con el tipo elegido. */
+  /** Crea un nuevo bloque de 7 sesiones efectivas con el tipo elegido. */
   startNewBlock: (type: WeekType) => Promise<void>;
   /** Selector manual de carga/descarga abierto desde el indicador. */
   isBlockPickerOpen: boolean;
@@ -39,16 +77,17 @@ export interface SessionState {
   changeCurrentBlockType: (type: WeekType) => Promise<void>;
 }
 
-export function isBlockExpired(block: TrainingBlock, now: number = Date.now()): boolean {
-  return now >= new Date(block.endDate).getTime();
+/** Determina si el bloque ya completó sus 7 sesiones efectivas. */
+export function isBlockExpired(block: TrainingBlock, _now: number = Date.now()): boolean {
+  const target = block.targetSessions ?? BLOCK_TARGET_SESSIONS;
+  return (block.sessionCount ?? 0) >= target;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Día actual dentro del bloque (1..7). */
-export function getBlockDay(block: TrainingBlock, now: number = Date.now()): number {
-  const elapsed = now - new Date(block.startDate).getTime();
-  return Math.min(7, Math.max(1, Math.floor(elapsed / DAY_MS) + 1));
+/** Número de sesión efectiva dentro del bloque (1..7). */
+export function getBlockDay(block: TrainingBlock, _now: number = Date.now()): number {
+  const target = block.targetSessions ?? BLOCK_TARGET_SESSIONS;
+  const count = block.sessionCount ?? 0;
+  return Math.min(target, Math.max(1, count));
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -62,6 +101,16 @@ export const useSessionStore = create<SessionState>()(
       currentBlock: null,
       lastBlock: null,
       blockStatus: 'idle',
+      showDeloadSuggestion: false,
+      dismissedBlockSuggestionId: null,
+
+      dismissDeloadSuggestion: () => {
+        const currentId = get().currentBlock?.id ?? null;
+        set({
+          showDeloadSuggestion: false,
+          dismissedBlockSuggestionId: currentId,
+        });
+      },
 
       startSession: () => {
         const current = get();
@@ -114,10 +163,28 @@ export const useSessionStore = create<SessionState>()(
       initBlock: async () => {
         try {
           const latest = await WorkoutRepository.getLatestBlock();
-          if (latest && !isBlockExpired(latest)) {
-            set({ currentBlock: latest, lastBlock: latest, blockStatus: 'active' });
+          if (latest) {
+            const target = latest.targetSessions ?? BLOCK_TARGET_SESSIONS;
+            const reachedSeven = (latest.sessionCount ?? 0) >= target;
+            const shouldSuggestDeload =
+              reachedSeven &&
+              latest.type === 'carga' &&
+              get().dismissedBlockSuggestionId !== latest.id;
+
+            set({
+              currentBlock: latest,
+              lastBlock: latest,
+              blockStatus: 'active',
+              showDeloadSuggestion: shouldSuggestDeload,
+            });
           } else {
-            set({ currentBlock: null, lastBlock: latest, blockStatus: 'needs_new', isBlockPickerOpen: false });
+            set({
+              currentBlock: null,
+              lastBlock: null,
+              blockStatus: 'needs_new',
+              isBlockPickerOpen: false,
+              showDeloadSuggestion: false,
+            });
           }
         } catch (error) {
           console.error('Error al evaluar el bloque de entrenamiento:', error);
@@ -126,7 +193,14 @@ export const useSessionStore = create<SessionState>()(
 
       startNewBlock: async (type) => {
         const block = await WorkoutRepository.createBlock(type);
-        set({ currentBlock: block, lastBlock: block, blockStatus: 'active', isBlockPickerOpen: false });
+        set({
+          currentBlock: block,
+          lastBlock: block,
+          blockStatus: 'active',
+          isBlockPickerOpen: false,
+          showDeloadSuggestion: false,
+          dismissedBlockSuggestionId: null,
+        });
       },
 
       isBlockPickerOpen: false,
@@ -143,7 +217,13 @@ export const useSessionStore = create<SessionState>()(
           await WorkoutRepository.updateBlockType(currentBlock.id, type);
         }
         const updated = { ...currentBlock, type };
-        set({ currentBlock: updated, lastBlock: updated, blockStatus: 'active', isBlockPickerOpen: false });
+        set({
+          currentBlock: updated,
+          lastBlock: updated,
+          blockStatus: 'active',
+          isBlockPickerOpen: false,
+          showDeloadSuggestion: false,
+        });
       },
     }),
     {
