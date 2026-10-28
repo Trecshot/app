@@ -83,11 +83,12 @@ export function isBlockExpired(block: TrainingBlock, _now: number = Date.now()):
   return (block.sessionCount ?? 0) >= target;
 }
 
-/** Número de sesión efectiva dentro del bloque (1..7). */
+/** Número de sesión actual dentro del bloque (1..7), calculado dinámicamente de las sesiones del bloque. */
 export function getBlockDay(block: TrainingBlock, _now: number = Date.now()): number {
   const target = block.targetSessions ?? BLOCK_TARGET_SESSIONS;
-  const count = block.sessionCount ?? 0;
-  return Math.min(target, Math.max(1, count));
+  const sesionesEnBloque = Math.max(0, block.sessionCount ?? 0);
+  const numeroSesionActual = Math.min(target, sesionesEnBloque + 1);
+  return numeroSesionActual;
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -162,18 +163,28 @@ export const useSessionStore = create<SessionState>()(
 
       initBlock: async () => {
         try {
-          const latest = await WorkoutRepository.getLatestBlock();
+          const [latest, history] = await Promise.all([
+            WorkoutRepository.getLatestBlock(),
+            WorkoutRepository.getSessions(),
+          ]);
           if (latest) {
-            const target = latest.targetSessions ?? BLOCK_TARGET_SESSIONS;
-            const reachedSeven = (latest.sessionCount ?? 0) >= target;
+            // Conteo dinámico de sesiones reales registradas con el block_id del bloque activo
+            const sesionesEnBloque = history.filter((s) => s.blockId === latest.id).length;
+            const syncedBlock: TrainingBlock = {
+              ...latest,
+              sessionCount: sesionesEnBloque,
+            };
+
+            const target = syncedBlock.targetSessions ?? BLOCK_TARGET_SESSIONS;
+            const reachedSeven = sesionesEnBloque >= target;
             const shouldSuggestDeload =
               reachedSeven &&
-              latest.type === 'carga' &&
-              get().dismissedBlockSuggestionId !== latest.id;
+              syncedBlock.type === 'carga' &&
+              get().dismissedBlockSuggestionId !== syncedBlock.id;
 
             set({
-              currentBlock: latest,
-              lastBlock: latest,
+              currentBlock: syncedBlock,
+              lastBlock: syncedBlock,
               blockStatus: 'active',
               showDeloadSuggestion: shouldSuggestDeload,
             });

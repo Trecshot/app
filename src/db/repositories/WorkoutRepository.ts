@@ -1,7 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import {
   createTrainingBlock,
-  deleteWorkoutById,
   findTrainingBlockForDate,
   getCardioBlocksByWorkoutId,
   getDatabase,
@@ -285,7 +284,29 @@ export class WorkoutRepository {
    * Se ejecuta en una transacción; las FK con ON DELETE CASCADE actúan como respaldo.
    */
   static async deleteWorkoutById(id: string): Promise<void> {
-    await deleteWorkoutById(id);
+    const db = await getDatabase();
+
+    // Determinamos si el ID es un número o un identificador de texto (UUID)
+    const numericId = /^\d+$/.test(id) ? Number(id) : -1;
+
+    // Buscamos primero el id interno real de la tabla workouts
+    const workout = await db.getFirstAsync<{ id: number }>(
+      'SELECT id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
+      [String(id), numericId],
+    );
+
+    if (!workout) {
+      console.warn(`No se encontró el entrenamiento con ID: ${id}`);
+      return;
+    }
+
+    // Ejecutamos el borrado dentro de una transacción blindada de SQLite
+    await db.withTransactionAsync(async () => {
+      await db.runAsync('DELETE FROM exercise_logs WHERE workout_id = ?;', [workout.id]);
+      await db.runAsync('DELETE FROM cardio_logs WHERE workout_id = ?;', [workout.id]);
+      await db.runAsync('DELETE FROM cardio_blocks WHERE workout_id = ?;', [workout.id]);
+      await db.runAsync('DELETE FROM workouts WHERE id = ?;', [workout.id]);
+    });
   }
 
   // ─── Bloques de entrenamiento (7 días) ─────────────────────────────────────

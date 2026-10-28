@@ -83,8 +83,11 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
   const deleteWorkout = useCallback(async (workoutId: string) => {
     try {
       await WorkoutRepository.deleteWorkoutById(workoutId);
+      // Actualiza la lista local quitando la sesión borrada
       setHistory((items) => items.filter((item) => item.id !== workoutId));
       setWeeklySummary(await WorkoutRepository.getWeeklySummary());
+
+      // IMPORTANTE: Refrescar el estado del bloque en el store global para actualizar el contador (ej. 2/7 -> 1/7)
       await useSessionStore.getState().initBlock();
     } catch {
       Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo.');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as Crypto from 'expo-crypto';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Settings, Maximize, RotateCcw, Info } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { TimerDisplay } from '../../src/components/workout/TimerDisplay';
@@ -49,6 +49,13 @@ export default function ActiveWorkoutScreen() {
   const startTimestamp = useSessionStore((s) => s.startTimestamp);
   const currentBlock = useSessionStore((s) => s.currentBlock);
   const startNewBlock = useSessionStore((s) => s.startNewBlock);
+
+  // Reevaluar el bloque actual cada vez que la pantalla gana el foco (ej. tras borrar en Historial)
+  useFocusEffect(
+    useCallback(() => {
+      void useSessionStore.getState().initBlock();
+    }, []),
+  );
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);

@@ -1283,26 +1283,26 @@ export async function eliminarSesion(id: string): Promise<void> {
  */
 export async function deleteWorkoutById(id: string): Promise<void> {
   const db = await getDatabase();
-  const numericId = /^\d+$/.test(id) ? Number(id) : -1;
-  const workout = await db.getFirstAsync<{ id: number; block_id: string | null }>(
-    'SELECT id, block_id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
-    [id, numericId],
-  );
-  if (!workout) return;
 
+  // Determinamos si el ID es un número o un identificador de texto (UUID)
+  const numericId = /^\d+$/.test(id) ? Number(id) : -1;
+
+  // Buscamos primero el id interno real de la tabla workouts
+  const workout = await db.getFirstAsync<{ id: number }>(
+    'SELECT id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
+    [String(id), numericId],
+  );
+
+  if (!workout) {
+    console.warn(`No se encontró el entrenamiento con ID: ${id}`);
+    return;
+  }
+
+  // Ejecutamos el borrado dentro de una transacción blindada de SQLite
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM exercise_logs WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM cardio_logs WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM cardio_blocks WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM workouts WHERE id = ?;', [workout.id]);
-    if (workout.block_id) {
-      await db.runAsync(
-        `UPDATE training_blocks
-         SET sessions_count = (SELECT COUNT(*) FROM workouts WHERE block_id = ?)
-         WHERE id = ?;`,
-        [workout.block_id, workout.block_id],
-      );
-    }
-    await recalculateAllHistoricalPRs(db);
   });
 }
