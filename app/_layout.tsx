@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { WorkoutRepository } from '../src/db/repositories/WorkoutRepository';
 import { NewBlockModal } from '../src/components/workout/NewBlockModal';
 import { useSessionStore } from '../src/store/useSessionStore';
+import { configurarCanalNotificaciones } from '../src/utils/restNotifications';
 
 // Retener la pantalla de inicio del sistema operativo hasta que la base de datos se inicialice
 void SplashScreen.preventAutoHideAsync().catch(() => undefined);
@@ -19,6 +20,8 @@ export default function RootLayout() {
       try {
         // Inicialización temprana de la base de datos y migraciones seguras
         await WorkoutRepository.initSchema();
+        // Configurar canal de notificaciones 'descanso-series' con prioridad MAX en el montaje inicial
+        void configurarCanalNotificaciones();
         // Evaluar la fecha actual contra el último bloque de 7 días
         await useSessionStore.getState().initBlock();
       } catch (error) {

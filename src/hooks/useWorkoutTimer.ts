@@ -1,20 +1,19 @@
 import { useState, useEffect, useCallback, SetStateAction, Dispatch } from 'react';
-import { AppState, Platform, Vibration } from 'react-native';
+import { AppState, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { isRunningInExpoGo, requireOptionalNativeModule } from 'expo';
+import { requireOptionalNativeModule } from 'expo';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useSessionStore } from '../store/useSessionStore';
+import {
+  cancelarAlarmaDescanso,
+  configurarCanalNotificaciones,
+  programarAlarmaDescanso,
+} from '../utils/restNotifications';
 import type { AudioPlayer } from 'expo-audio';
 
 const REST_TIMER_STORAGE_KEY = 'workout-rest-timer-storage-v1';
 const REST_KEEP_AWAKE_TAG = 'workout-rest-timer';
-const IS_EXPO_GO = isRunningInExpoGo();
-// Los canales de Android son inmutables una vez creados: se usa un ID versión v3 y sonido adaptado a Expo Go vs APK.
-const ANDROID_REST_CHANNEL_ID = IS_EXPO_GO
-  ? 'rest-timer-default-v3'
-  : 'rest-timer-bell-v3';
-const REST_NOTIFICATION_SOUND = IS_EXPO_GO ? 'default' : 'bell.mp3';
 
 export interface RestTimerOption {
   label: string;
@@ -41,76 +40,7 @@ export const formatRestDuration = (sec: number): string => {
   return `${Math.floor(safe / 60)}:${(safe % 60).toString().padStart(2, '0')}`;
 };
 
-// Verificación previa de módulos nativos antes de llamar require() para evitar RedBox en Expo Go
-let notificationHandlerConfigured = false;
-let notificationChannelPromise: Promise<void> | null = null;
-
-function getNotificationsModule(): typeof import('expo-notifications') | null {
-  try {
-    if (!requireOptionalNativeModule('ExpoNotificationScheduler')) return null;
-
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Notifications = require('expo-notifications') as typeof import('expo-notifications');
-    if (!notificationHandlerConfigured && Notifications?.setNotificationHandler) {
-      notificationHandlerConfigured = true;
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowBanner: true,
-          shouldShowList: true,
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-        }),
-      });
-    }
-    return Notifications;
-  } catch {
-    return null;
-  }
-}
-
-async function ensureNotificationChannelAndPermissions(): Promise<
-  typeof import('expo-notifications') | null
-> {
-  const Notifications = getNotificationsModule();
-  if (!Notifications) return null;
-
-  if (!notificationChannelPromise) {
-    notificationChannelPromise = (async () => {
-      try {
-        if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync(ANDROID_REST_CHANNEL_ID, {
-            name: 'Temporizador de Descanso',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 400, 200, 400],
-            sound: REST_NOTIFICATION_SOUND,
-            enableVibrate: true,
-            bypassDnd: true,
-            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-          });
-        }
-
-        const perms = await Notifications.getPermissionsAsync();
-        if (perms.status !== 'granted') {
-          await Notifications.requestPermissionsAsync({
-            ios: {
-              allowAlert: true,
-              allowBadge: false,
-              allowSound: true,
-            },
-          });
-        }
-      } catch {
-        // Continuar de forma segura si los permisos o canales no están disponibles
-      }
-    })();
-  }
-
-  await notificationChannelPromise;
-  return Notifications;
-}
-
-// Reproductor de audio ÚNICO compartido por toda la app (evita agotar los decodificadores nativos
-// cuando hay múltiples filas de series montadas simultáneamente).
+// Reproductor de audio ÚNICO compartido por toda la app para feedback en primer plano
 let sharedBellPlayer: AudioPlayer | null = null;
 let audioModeConfigured = false;
 
@@ -126,14 +56,14 @@ function getBellPlayer(): AudioPlayer | null {
       void expoAudio
         .setAudioModeAsync({
           playsInSilentMode: true,
-          shouldPlayInBackground: true,
+          shouldPlayInBackground: false,
           interruptionModeAndroid: 'duckOthers',
           interruptionMode: 'mixWithOthers',
         })
         .catch(() => undefined);
     }
     if (expoAudio?.createAudioPlayer) {
-      sharedBellPlayer = expoAudio.createAudioPlayer(require('../../assets/bell.mp3'));
+      sharedBellPlayer = expoAudio.createAudioPlayer(require('../../assets/bell.wav'));
       sharedBellPlayer.volume = 1.0;
       return sharedBellPlayer;
     }
@@ -143,7 +73,7 @@ function getBellPlayer(): AudioPlayer | null {
   }
 }
 
-function playBellAndVibrate() {
+function playForegroundBellAndVibrate() {
   try {
     Vibration.vibrate([0, 350, 150, 350]);
   } catch {
@@ -159,7 +89,6 @@ function playBellAndVibrate() {
     void player.seekTo(0).catch(() => undefined);
     player.play();
   } catch {
-    // Si el reproductor perdió el contexto nativo, recrearlo una vez
     sharedBellPlayer = null;
     const retryPlayer = getBellPlayer();
     try {
@@ -176,7 +105,8 @@ interface PersistedRestTimerState {
   durationSeconds: number;
 }
 
-// Estado compartido entre instancias del hook basándose en timestamps reales (funciona en segundo plano)
+// El reloj visual usa timestamps reales (Date.now()) únicamente para actualizar la UI;
+// la notificación en segundo plano NO depende de JS, sino de `programarAlarmaDescanso` en el SO.
 let sharedEndTimestamp: number | null = null;
 let sharedActiveSetId: string | null = null;
 let sharedDurationSeconds = 120;
@@ -233,14 +163,18 @@ function syncTimerFromClock() {
   const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
 
   if (remainingSec <= 0) {
-    const finishedJustNow = remainingMs > -8000;
+    // Si expiró mientras el usuario estaba mirando la pantalla en primer plano, sonar campana local;
+    // si estaba en segundo plano / pantalla bloqueada, el kernel de Android ya disparó la alarma nativa.
+    const finishedInForeground =
+      AppState.currentState === 'active' && remainingMs > -1800;
+
     sharedEndTimestamp = null;
     notifyTimerSubscribers(0, false, null, sharedDurationSeconds);
     void persistRestTimerState();
     void deactivateKeepAwake(REST_KEEP_AWAKE_TAG).catch(() => undefined);
 
-    if (finishedJustNow) {
-      playBellAndVibrate();
+    if (finishedInForeground) {
+      playForegroundBellAndVibrate();
     }
     stopGlobalTickerIfIdle();
   } else if (remainingSec !== sharedTimeLeft) {
@@ -278,8 +212,7 @@ async function hydrateRestTimerIfNeeded(): Promise<void> {
   if (isHydrated) return;
   isHydrated = true;
 
-  // Precargar canal de notificaciones y reproductor único al iniciar la app
-  void ensureNotificationChannelAndPermissions();
+  void configurarCanalNotificaciones();
   getBellPlayer();
 
   try {
@@ -316,34 +249,6 @@ async function hydrateRestTimerIfNeeded(): Promise<void> {
   }
 }
 
-async function scheduleRestNotification(seconds: number): Promise<void> {
-  try {
-    const Notifications = await ensureNotificationChannelAndPermissions();
-    if (!Notifications) return;
-
-    await Notifications.cancelAllScheduledNotificationsAsync();
-    if (seconds > 0) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '⏱ ¡Descanso Finalizado!',
-          body: 'Es hora de comenzar tu siguiente serie.',
-          sound: REST_NOTIFICATION_SOUND,
-          priority: Notifications.AndroidNotificationPriority.MAX,
-          vibrate: [0, 400, 200, 400],
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: Math.max(1, Math.round(seconds)),
-          channelId:
-            Platform.OS === 'android' ? ANDROID_REST_CHANNEL_ID : undefined,
-        },
-      });
-    }
-  } catch {
-    // Continuar de forma segura si las notificaciones no están disponibles
-  }
-}
-
 export interface UseWorkoutTimerReturn {
   timeLeft: number;
   isActive: boolean;
@@ -364,7 +269,6 @@ export const useWorkoutTimer = (): UseWorkoutTimerReturn => {
     sharedDurationSeconds,
   );
 
-  // Hidratar estado en segundo plano y suscribir cambios
   useEffect(() => {
     void hydrateRestTimerIfNeeded();
 
@@ -398,7 +302,11 @@ export const useWorkoutTimer = (): UseWorkoutTimerReturn => {
       sharedDurationSeconds,
     );
     void persistRestTimerState();
-    void scheduleRestNotification(clamped);
+    if (clamped > 0 && nextActive) {
+      void programarAlarmaDescanso(clamped);
+    } else {
+      void cancelarAlarmaDescanso();
+    }
   }, []);
 
   const startTimer = useCallback(async (seconds: number, setId?: string) => {
@@ -411,8 +319,8 @@ export const useWorkoutTimer = (): UseWorkoutTimerReturn => {
     void activateKeepAwakeAsync(REST_KEEP_AWAKE_TAG).catch(() => undefined);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
 
-    // Anular notificaciones previas y programar alerta OS en segundo plano
-    await scheduleRestNotification(cleanSeconds);
+    // Delegar inmediatamente el disparo de la alarma al kernel de Android / iOS (no espera a JS)
+    await programarAlarmaDescanso(cleanSeconds);
   }, []);
 
   const stopTimer = useCallback(async () => {
@@ -421,12 +329,8 @@ export const useWorkoutTimer = (): UseWorkoutTimerReturn => {
     stopGlobalTickerIfIdle();
     void persistRestTimerState();
     void deactivateKeepAwake(REST_KEEP_AWAKE_TAG).catch(() => undefined);
-    try {
-      const Notifications = getNotificationsModule();
-      await Notifications?.cancelAllScheduledNotificationsAsync();
-    } catch {
-      // Ignorar si falla en plataforma no compatible
-    }
+    // Cancelar alarma nativa programada en el SO
+    await cancelarAlarmaDescanso();
   }, []);
 
   return {
