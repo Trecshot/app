@@ -44,7 +44,8 @@
             "./assets/bell.mp3"
           ]
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "extra": {
       "eas": {
