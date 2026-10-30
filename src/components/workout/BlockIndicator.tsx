@@ -12,6 +12,7 @@ import {
 /** Indicador global: "Semana de Carga - Sesión 3/7 · Iniciado el 23 de octubre". */
 export function BlockIndicator() {
   const currentBlock = useSessionStore((s) => s.currentBlock);
+  const activeWeek = useSessionStore((s) => s.activeWeek);
   const openBlockPicker = useSessionStore((s) => s.openBlockPicker);
 
   if (!currentBlock) {
@@ -25,8 +26,14 @@ export function BlockIndicator() {
 
   const isCarga = currentBlock.type === 'carga';
   const sessionNum = getBlockDay(currentBlock);
-  const targetSessions = currentBlock.targetSessions ?? BLOCK_TARGET_SESSIONS;
+  const targetSessions =
+    activeWeek?.total_planned_sessions ??
+    currentBlock.targetSessions ??
+    BLOCK_TARGET_SESSIONS;
   const startedLabel = formatBlockStartDate(currentBlock.startDate);
+  const weekPrefix = activeWeek
+    ? `Semana ${activeWeek.week_number} (${isCarga ? 'Carga' : 'Descarga'})`
+    : `Semana de ${isCarga ? 'Carga' : 'Descarga'}`;
 
   return (
     <View style={styles.container}>
@@ -40,7 +47,7 @@ export function BlockIndicator() {
       >
         <View style={[styles.dot, { backgroundColor: isCarga ? COLORS.timerSurface : COLORS.primaryDark }]} />
         <Text style={styles.text}>
-          Semana de {isCarga ? 'Carga' : 'Descarga'} - Sesión {sessionNum}/{targetSessions}
+          {weekPrefix} - Sesión {sessionNum}/{targetSessions}
         </Text>
         <ChevronDown size={14} color={COLORS.textPrimary} strokeWidth={2.5} />
       </TouchableOpacity>

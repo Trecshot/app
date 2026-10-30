@@ -98,12 +98,16 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
   { id: 'core_plank_weighted', name: 'Plancha (Plank) con Lastre', muscleGroup: 'Core' },
 ];
 
-// Estructura de una serie
+// Estructura y tipificación de una serie
+export type SetType = 'NORMAL' | 'DROP_SET' | 'WARMUP';
+
 export interface WorkoutSet {
   id: string;
-  reps: string;
-  weight: string;
+  weight: number | string;
+  reps: number | string;
   isCompleted: boolean;
+  setType: SetType; // Nuevo campo
+  restSeconds?: number; // Tiempo de descanso configurado para esta serie (60 a 300s)
 }
 
 // 5. Bloque de ejercicio instanciado

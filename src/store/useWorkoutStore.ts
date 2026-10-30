@@ -7,12 +7,13 @@ import {
   getCatalogExerciseById,
   MuscleGroup,
   MUSCLE_GROUPS,
+  SetType,
   WorkoutExerciseBlock,
   WorkoutSet,
   CardioBlock,
 } from '../../types';
 
-export type { WorkoutExerciseBlock, WorkoutSet };
+export type { SetType, WorkoutExerciseBlock, WorkoutSet };
 // Alias para compatibilidad hacia atrás
 export type WorkoutExercise = WorkoutExerciseBlock;
 
@@ -43,11 +44,13 @@ export interface WorkoutStore {
   exercises: WorkoutExerciseBlock[];
   cardio: CardioBlock[];
   notes: string;
+  defaultRestSeconds: number;
 
   // Acciones de Enfoque de Sesión y Notas
   setSessionFocus: (focus: MuscleGroup[]) => void;
   toggleSessionFocus: (group: MuscleGroup) => void;
   setNotes: (notes: string) => void;
+  setDefaultRestSeconds: (seconds: number) => void;
 
   // Acciones de Ejercicio
   addExercise: (catalogExerciseId?: string, muscleGroup?: MuscleGroup) => void;
@@ -58,9 +61,12 @@ export interface WorkoutStore {
   updateExercise: (exerciseId: string, name: string) => void;
 
   // Acciones de Series
-  addSet: (exerciseId: string) => void;
+  addSet: (exerciseId: string, setType?: SetType) => void;
   removeSet: (exerciseId: string, setId: string) => void;
   updateSet: (exerciseId: string, setId: string, field: 'reps' | 'weight', value: string) => void;
+  updateSetType: (exerciseId: string, setId: string, setType: SetType) => void;
+  updateSetRestSeconds: (exerciseId: string, setId: string, restSeconds: number) => void;
+  updateSetStatus: (setId: string, isCompleted: boolean, exerciseId?: string) => void;
   toggleSetComplete: (exerciseId: string, setId: string) => void;
   completeAllSetsInBlock: (blockId: string) => void;
 
@@ -83,10 +89,14 @@ export const useWorkoutStore = create<WorkoutStore>()(
       exercises: [],
       cardio: [],
       notes: '',
+      defaultRestSeconds: 120,
 
       setSessionFocus: (focus: MuscleGroup[]) => set({ sessionFocus: focus }),
 
       setNotes: (notes: string) => set({ notes }),
+
+      setDefaultRestSeconds: (seconds: number) =>
+        set({ defaultRestSeconds: Math.max(60, seconds) }),
 
       toggleSessionFocus: (group: MuscleGroup) =>
         set((state) => {
@@ -115,7 +125,16 @@ export const useWorkoutStore = create<WorkoutStore>()(
               catalogExerciseId: catalogExercise?.id ?? catalogExerciseId,
               selectedMuscleGroup: resolvedGroup,
               name: catalogExercise?.name,
-              sets: [{ id: generateId(), reps: '', weight: '', isCompleted: false }],
+              sets: [
+                {
+                  id: generateId(),
+                  reps: '',
+                  weight: '',
+                  isCompleted: false,
+                  setType: 'NORMAL',
+                  restSeconds: state.defaultRestSeconds || 120,
+                },
+              ],
             },
           ],
         }));
@@ -165,10 +184,14 @@ export const useWorkoutStore = create<WorkoutStore>()(
           ),
         })),
 
-      addSet: (exerciseId) =>
+      addSet: (exerciseId, setType: SetType = 'NORMAL') =>
         set((state) => ({
           exercises: state.exercises.map((ex) => {
             if (ex.id === exerciseId) {
+              const lastSetRest =
+                ex.sets.length > 0
+                  ? ex.sets[ex.sets.length - 1].restSeconds
+                  : undefined;
               return {
                 ...ex,
                 sets: [
@@ -178,6 +201,8 @@ export const useWorkoutStore = create<WorkoutStore>()(
                     reps: '',
                     weight: '',
                     isCompleted: false,
+                    setType,
+                    restSeconds: lastSetRest ?? (state.defaultRestSeconds || 120),
                   },
                 ],
               };
@@ -205,6 +230,45 @@ export const useWorkoutStore = create<WorkoutStore>()(
                 }
               : ex,
           ),
+        })),
+
+      updateSetType: (exerciseId, setId, setType) =>
+        set((state) => ({
+          exercises: state.exercises.map((ex) =>
+            ex.id === exerciseId
+              ? {
+                  ...ex,
+                  sets: ex.sets.map((s) => (s.id === setId ? { ...s, setType } : s)),
+                }
+              : ex,
+          ),
+        })),
+
+      updateSetRestSeconds: (exerciseId, setId, restSeconds) =>
+        set((state) => ({
+          defaultRestSeconds: restSeconds,
+          exercises: state.exercises.map((ex) =>
+            ex.id === exerciseId
+              ? {
+                  ...ex,
+                  sets: ex.sets.map((s) =>
+                    s.id === setId ? { ...s, restSeconds } : s,
+                  ),
+                }
+              : ex,
+          ),
+        })),
+
+      updateSetStatus: (setId, isCompleted, exerciseId) =>
+        set((state) => ({
+          exercises: state.exercises.map((ex) => {
+            if (exerciseId && ex.id !== exerciseId) return ex;
+            if (!ex.sets.some((s) => s.id === setId)) return ex;
+            return {
+              ...ex,
+              sets: ex.sets.map((s) => (s.id === setId ? { ...s, isCompleted } : s)),
+            };
+          }),
         })),
 
       toggleSetComplete: (exerciseId, setId) =>

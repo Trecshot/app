@@ -14,16 +14,19 @@ import {
   obtenerSesiones,
   TRAINING_BLOCK_DAYS,
   TRAINING_BLOCK_SESSIONS,
+  updateTrainingBlockTargetSessions,
   updateTrainingBlockType,
 } from '../../../database';
 import type {
   CardioBlock,
   SesionEntrenamiento,
+  SetType,
   TrainingBlock,
   WeekType,
   WeeklySummary,
   WorkoutDetails,
   WorkoutExerciseBlock,
+  WorkoutSet,
 } from '../../../types';
 import {
   countPRsForActiveWorkoutBlocks,
@@ -167,24 +170,28 @@ export class WorkoutRepository {
       const exerciseLogs = prEvaluation.exercises.flatMap((exercise, exerciseOrder) =>
         exercise.series
           .filter((set) => toStrictIntegerReps(set.reps) > 0 && toStrictRealWeight(set.pesoKg) >= 0)
-          .map((set, setIndex) => ({
-            exerciseId: exercise.id || Crypto.randomUUID(),
-            catalogExerciseId: exercise.catalogExerciseId ?? null,
-            exerciseOrder,
-            setId: set.id || Crypto.randomUUID(),
-            exerciseName: exercise.nombre,
-            muscleGroup:
-              exercise.grupoMuscular?.trim() || exercise.selectedMuscleGroup || 'General',
-            setNumber: setIndex + 1,
-            reps: toStrictIntegerReps(set.reps),
-            weight: toStrictRealWeight(set.pesoKg),
-            isPr: set.isPr ? 1 : 0,
-          })),
+          .map((set, setIndex) => {
+            const setType: SetType = set.setType ?? 'NORMAL';
+            return {
+              exerciseId: exercise.id || Crypto.randomUUID(),
+              catalogExerciseId: exercise.catalogExerciseId ?? null,
+              exerciseOrder,
+              setId: set.id || Crypto.randomUUID(),
+              exerciseName: exercise.nombre,
+              muscleGroup:
+                exercise.grupoMuscular?.trim() || exercise.selectedMuscleGroup || 'General',
+              setNumber: setIndex + 1,
+              reps: toStrictIntegerReps(set.reps),
+              weight: toStrictRealWeight(set.pesoKg),
+              isPr: setType === 'NORMAL' && set.isPr ? 1 : 0,
+              setType,
+            };
+          }),
       );
 
       if (exerciseLogs.length > 0) {
         const placeholders = exerciseLogs
-          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .join(', ');
         const values = exerciseLogs.flatMap((log) => [
           workoutId,
@@ -198,11 +205,12 @@ export class WorkoutRepository {
           log.reps,
           log.weight,
           log.isPr,
+          log.setType,
         ]);
         await db.runAsync(
           `INSERT INTO exercise_logs (
             workout_id, exercise_id, catalog_exercise_id, exercise_order, exercise_name,
-            muscle_group, set_id, set_number, reps, weight, is_pr
+            muscle_group, set_id, set_number, reps, weight, is_pr, set_type
           ) VALUES ${placeholders};`,
           values,
         );
@@ -319,12 +327,22 @@ export class WorkoutRepository {
     return findTrainingBlockForDate(date);
   }
 
-  static async createBlock(type: WeekType): Promise<TrainingBlock> {
-    return createTrainingBlock(type);
+  static async createBlock(
+    type: WeekType,
+    targetSessions: number = TRAINING_BLOCK_SESSIONS,
+  ): Promise<TrainingBlock> {
+    return createTrainingBlock(type, new Date(), targetSessions);
   }
 
   static async updateBlockType(blockId: string, type: WeekType): Promise<void> {
     await updateTrainingBlockType(blockId, type);
+  }
+
+  static async updateBlockTargetSessions(
+    blockId: string,
+    targetSessions: number,
+  ): Promise<void> {
+    await updateTrainingBlockTargetSessions(blockId, targetSessions);
   }
 
   static getIsoWeekNumber(dateValue: string): number {
@@ -347,5 +365,28 @@ export class WorkoutRepository {
   ): Promise<number> {
     const historicalMax = await getHistoricalMaxWeights();
     return countPRsForActiveWorkoutBlocks(blocks, historicalMax, tipoSemana);
+  }
+
+  /**
+   * Persiste una serie individual con su tipificación (`NORMAL` | `DROP_SET` | `WARMUP`) en `workout_sets`.
+   */
+  static async addSet(exerciseId: string, set: WorkoutSet): Promise<void> {
+    const db = await getDatabase();
+    await db.runAsync(
+      `INSERT OR REPLACE INTO workout_sets (id, exercise_id, weight, reps, is_completed, set_type) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        set.id,
+        exerciseId,
+        toStrictRealWeight(set.weight),
+        toStrictIntegerReps(set.reps),
+        set.isCompleted ? 1 : 0,
+        set.setType ?? 'NORMAL',
+      ],
+    );
+  }
+
+  async addSet(exerciseId: string, set: WorkoutSet): Promise<void> {
+    await WorkoutRepository.addSet(exerciseId, set);
   }
 }

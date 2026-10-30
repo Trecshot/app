@@ -65,7 +65,12 @@ function toCardProps(session: SesionEntrenamiento): WorkoutHistoryCardProps & { 
           (acc, ex) =>
             acc +
             ex.series.filter(
-              (s) => Boolean(s.isPr) && s.reps >= 1 && s.reps <= 5 && s.pesoKg > 0,
+              (s) =>
+                (s.setType ?? 'NORMAL') === 'NORMAL' &&
+                Boolean(s.isPr) &&
+                s.reps >= 1 &&
+                s.reps <= 5 &&
+                s.pesoKg > 0,
             ).length,
           0,
         )

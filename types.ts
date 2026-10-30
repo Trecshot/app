@@ -1,5 +1,10 @@
-import type { CardioBlock, MuscleGroup } from './types/workout';
+import type { CardioBlock, MuscleGroup, SetType } from './types/workout';
 export * from './types/workout';
+export type {
+  MesocycleWeek,
+  SessionNote,
+  WeekType as PlannedWeekType,
+} from './types/mesocycle';
 
 export type WeekType = 'carga' | 'descarga';
 
@@ -43,6 +48,7 @@ export interface ExerciseLog {
   reps: number;
   weight: number;
   isPr?: boolean;
+  setType?: SetType;
 }
 
 export interface CardioLog {
@@ -75,6 +81,7 @@ export interface Serie {
   reps: number;
   pesoKg: number;
   isPr?: boolean;
+  setType?: SetType;
 }
 
 export interface Ejercicio {

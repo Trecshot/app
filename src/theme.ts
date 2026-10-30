@@ -12,6 +12,11 @@ export const COLORS = {
   textInverted: '#FFFFFF', // Blanco para textos sobre fondos oscuros
   border: '#E5E7EB', // Líneas divisorias sutiles
   danger: '#EF4444', // Rojo para acciones destructivas / eliminar
+  dropSetIndicator: 'rgba(220, 38, 38, 0.12)', // Crimson traslúcido para fila Drop Set
+  dropSetAccent: '#DC2626', // Crimson sólido para etiqueta/borde Drop Set
+  warmupIndicator: 'rgba(245, 158, 11, 0.14)', // Amber traslúcido para fila Warmup
+  warmupAccent: '#D97706', // Amber sólido para etiqueta/borde Warmup
+  normalSet: 'transparent', // Base transparente para serie normal
 };
 
 export const SPACING = {
@@ -67,3 +72,11 @@ export const GLOBAL_STYLES = StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export const theme = {
+  colors: COLORS,
+  spacing: SPACING,
+  styles: GLOBAL_STYLES,
+};
+
+export default theme;

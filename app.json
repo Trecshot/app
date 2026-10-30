@@ -28,7 +28,8 @@
       "expo-router",
       "expo-status-bar",
       "expo-splash-screen",
-      "expo-font"
+      "expo-font",
+      "expo-audio"
     ],
     "extra": {
       "eas": {

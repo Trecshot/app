@@ -4,6 +4,7 @@ import { X, PlusCircle, ChevronDown, Dumbbell, Tag, Lock, CheckCheck } from 'luc
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../theme';
 import { SetRow } from './SetRow';
 import { ExerciseBottomSheet } from './ExerciseBottomSheet';
+import { useWorkoutTimer } from '../../hooks/useWorkoutTimer';
 import {
   useWorkoutStore,
   WorkoutExerciseBlock,
@@ -27,6 +28,8 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
   const removeExercise = useWorkoutStore((s) => s.removeExercise);
   const selectExercise = useWorkoutStore((s) => s.selectExercise);
   const updateMuscleGroup = useWorkoutStore((s) => s.updateMuscleGroup);
+  const defaultRestSeconds = useWorkoutStore((s) => s.defaultRestSeconds);
+  const { startTimer } = useWorkoutTimer();
 
   const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
   const [isExerciseSheetOpen, setIsExerciseSheetOpen] = useState(false);
@@ -113,7 +116,14 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
 
         {/* Botón para completar todas las series del bloque */}
         <Pressable
-          onPress={() => completeAllSetsInBlock(exercise.id)}
+          onPress={() => {
+            completeAllSetsInBlock(exercise.id);
+            const lastSet = exercise.sets[exercise.sets.length - 1];
+            void startTimer(
+              lastSet?.restSeconds ?? defaultRestSeconds ?? 120,
+              lastSet?.id,
+            );
+          }}
           disabled={allSetsCompleted}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityLabel="Completar todas las series"
@@ -185,7 +195,7 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
 
       {/* 3. Encabezados de la Tabla de Series */}
       <View style={styles.tableHeader}>
-        <Text style={[styles.columnLabel, { width: 40, textAlign: 'center' }]}>SERIE</Text>
+        <Text style={[styles.columnLabel, { width: 86, textAlign: 'center' }]}>SERIE / TIPO</Text>
         <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>REPS</Text>
         <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>PESO (KG)</Text>
         <View style={{ width: 70 }} />
@@ -201,16 +211,18 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
           reps={set.reps}
           weight={set.weight}
           isCompleted={set.isCompleted}
+          setType={set.setType ?? 'NORMAL'}
+          set={set}
         />
       ))}
 
-      {/* 5. Botón Añadir Serie */}
+      {/* 5. Botón para Añadir Serie */}
       <TouchableOpacity
         style={styles.addSetButton}
         onPress={() => addSet(exercise.id)}
         activeOpacity={0.7}
       >
-        <PlusCircle size={16} color={COLORS.primaryDark} />
+        <PlusCircle size={15} color={COLORS.primaryDark} />
         <Text style={styles.addSetText}>Añadir serie</Text>
       </TouchableOpacity>
 
@@ -350,13 +362,19 @@ const styles = StyleSheet.create({
   addSetButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     marginTop: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: COLORS.surfaceHighlight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   addSetText: {
     color: COLORS.primaryDark,
-    fontWeight: '600',
-    marginLeft: SPACING.xs,
-    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 5,
+    fontSize: 13,
   },
 });

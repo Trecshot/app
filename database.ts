@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import * as SQLite from 'expo-sqlite';
-import type { Cardio, CardioBlock, CardioLog, CardioType, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, TrainingBlock, WeekType, WeeklySummary, Workout, WorkoutDetails } from './types';
+import type { Cardio, CardioBlock, CardioLog, CardioType, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, SetType, TrainingBlock, WeekType, WeeklySummary, Workout, WorkoutDetails } from './types';
 import { EXERCISE_CATALOG } from './types';
 import {
   evaluateSessionPRs,
@@ -13,6 +13,7 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
 let prRuleV7Applied = false;
 let cardioFkFixed = false;
+let mesocycleTablesReady = false;
 let catalogSyncedCount = 0;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -28,6 +29,10 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
     if (!prRuleV7Applied) {
       prRuleV7Applied = true;
       await migrateNumericTypesAndPRColumns(dbInstance).catch(() => undefined);
+    }
+    if (!mesocycleTablesReady) {
+      mesocycleTablesReady = true;
+      await ensureMesocycleTables(dbInstance).catch(() => undefined);
     }
     return dbInstance;
   }
@@ -82,6 +87,14 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         block_id TEXT REFERENCES training_blocks (id) ON DELETE SET NULL,
         prs_count INTEGER NOT NULL DEFAULT 0
       );
+      CREATE TABLE IF NOT EXISTS workout_sets (
+        id TEXT PRIMARY KEY,
+        exercise_id TEXT,
+        weight REAL,
+        reps INTEGER,
+        is_completed INTEGER,
+        set_type TEXT DEFAULT 'NORMAL'
+      );
       CREATE TABLE IF NOT EXISTS exercise_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         workout_id INTEGER NOT NULL,
@@ -95,6 +108,7 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         reps INTEGER NOT NULL,      -- Forzado a INTEGER
         weight REAL NOT NULL,       -- Forzado a REAL (Evita ordenamiento alfabético con MAX)
         is_pr INTEGER NOT NULL DEFAULT 0,
+        set_type TEXT DEFAULT 'NORMAL',
         FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE,
         UNIQUE (workout_id, exercise_id, set_number)
       );
@@ -119,6 +133,21 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (workout_id) REFERENCES workouts (id) ON DELETE CASCADE
       );
+      CREATE TABLE IF NOT EXISTS mesocycle_weeks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_number INTEGER NOT NULL CHECK(week_number BETWEEN 1 AND 10),
+        type TEXT NOT NULL CHECK(type IN ('CARGA', 'DESCARGA')),
+        total_planned_sessions INTEGER DEFAULT 7,
+        week_comment TEXT,
+        is_current INTEGER DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS planned_session_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_id INTEGER NOT NULL,
+        session_index INTEGER NOT NULL,
+        session_note TEXT NOT NULL,
+        FOREIGN KEY (week_id) REFERENCES mesocycle_weeks(id) ON DELETE CASCADE
+      );
     `);
     await seedExerciseCatalog(db);
     await migrateCycleWeekColumn(db);
@@ -133,8 +162,10 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await migrateFixCardioBlocksForeignKey(db);
     await migrateTrainingBlocksSessionCounter(db);
     await migrateNumericTypesAndPRColumns(db);
+    await ensureMesocycleTables(db);
     cardioFkFixed = true;
     prRuleV7Applied = true;
+    mesocycleTablesReady = true;
     catalogSyncedCount = EXERCISE_CATALOG.length;
     dbInstance = db;
     return db;
@@ -461,6 +492,24 @@ async function migrateNumericTypesAndPRColumns(db: SQLite.SQLiteDatabase): Promi
   if (!logColumns.some((col) => col.name === 'is_pr')) {
     await db.execAsync('ALTER TABLE exercise_logs ADD COLUMN is_pr INTEGER NOT NULL DEFAULT 0;');
   }
+  if (!logColumns.some((col) => col.name === 'set_type')) {
+    await db.execAsync("ALTER TABLE exercise_logs ADD COLUMN set_type TEXT DEFAULT 'NORMAL';");
+  }
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS workout_sets (
+      id TEXT PRIMARY KEY,
+      exercise_id TEXT,
+      weight REAL,
+      reps INTEGER,
+      is_completed INTEGER,
+      set_type TEXT DEFAULT 'NORMAL'
+    );
+  `);
+  const workoutSetColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(workout_sets);');
+  if (!workoutSetColumns.some((col) => col.name === 'set_type')) {
+    await db.execAsync("ALTER TABLE workout_sets ADD COLUMN set_type TEXT DEFAULT 'NORMAL';");
+  }
 
   await db.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_exercise_logs_catalog_weight
@@ -478,6 +527,29 @@ async function migrateNumericTypesAndPRColumns(db: SQLite.SQLiteDatabase): Promi
   `);
   await recalculateAllHistoricalPRs(db);
   await db.execAsync('PRAGMA user_version = 7;');
+}
+
+async function ensureMesocycleTables(db: SQLite.SQLiteDatabase): Promise<void> {
+  await db.execAsync(`
+    PRAGMA foreign_keys = ON;
+
+    CREATE TABLE IF NOT EXISTS mesocycle_weeks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_number INTEGER NOT NULL CHECK(week_number BETWEEN 1 AND 10),
+        type TEXT NOT NULL CHECK(type IN ('CARGA', 'DESCARGA')),
+        total_planned_sessions INTEGER DEFAULT 7,
+        week_comment TEXT,
+        is_current INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS planned_session_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_id INTEGER NOT NULL,
+        session_index INTEGER NOT NULL,
+        session_note TEXT NOT NULL,
+        FOREIGN KEY (week_id) REFERENCES mesocycle_weeks(id) ON DELETE CASCADE
+    );
+  `);
 }
 
 /**
@@ -501,6 +573,7 @@ export async function getHistoricalMaxWeights(
      FROM exercise_logs
      WHERE CAST(reps AS INTEGER) > 0
        AND CAST(weight AS REAL) > 0
+       AND COALESCE(set_type, 'NORMAL') = 'NORMAL'
        AND (? IS NULL OR workout_id != ?)
      GROUP BY COALESCE(NULLIF(catalog_exercise_id, ''), LOWER(TRIM(exercise_name)));`,
     [excludeWorkoutId ?? null, excludeWorkoutId ?? null],
@@ -543,9 +616,11 @@ export async function recalculateAllHistoricalPRs(
       set_number: number;
       reps: number;
       weight: number;
+      set_type: SetType | null;
     }>(
       `SELECT id, exercise_id, catalog_exercise_id, exercise_name, muscle_group,
-              set_id, set_number, CAST(reps AS INTEGER) AS reps, CAST(weight AS REAL) AS weight
+              set_id, set_number, CAST(reps AS INTEGER) AS reps, CAST(weight AS REAL) AS weight,
+              COALESCE(set_type, 'NORMAL') AS set_type
        FROM exercise_logs
        WHERE workout_id = ?
        ORDER BY exercise_order ASC, set_number ASC;`,
@@ -558,25 +633,21 @@ export async function recalculateAllHistoricalPRs(
     const exercisesMap = new Map<string, Ejercicio>();
     for (const log of logs) {
       const existing = exercisesMap.get(log.exercise_id);
+      const setItem = {
+        id: log.set_id || String(log.id),
+        reps: toStrictIntegerReps(log.reps),
+        pesoKg: toStrictRealWeight(log.weight),
+        setType: (log.set_type ?? 'NORMAL') as SetType,
+      };
       if (existing) {
-        existing.series.push({
-          id: log.set_id || String(log.id),
-          reps: toStrictIntegerReps(log.reps),
-          pesoKg: toStrictRealWeight(log.weight),
-        });
+        existing.series.push(setItem);
       } else {
         exercisesMap.set(log.exercise_id, {
           id: log.exercise_id,
           catalogExerciseId: log.catalog_exercise_id ?? undefined,
           nombre: log.exercise_name,
           grupoMuscular: log.muscle_group,
-          series: [
-            {
-              id: log.set_id || String(log.id),
-              reps: toStrictIntegerReps(log.reps),
-              pesoKg: toStrictRealWeight(log.weight),
-            },
-          ],
+          series: [setItem],
         });
       }
     }
@@ -648,23 +719,41 @@ export async function findTrainingBlockForDate(_date: Date = new Date()): Promis
   return row;
 }
 
-/** Crea un bloque de 7 sesiones efectivas que inicia hoy (Sesión 1/7). */
-export async function createTrainingBlock(type: WeekType, from: Date = new Date()): Promise<TrainingBlock> {
+/** Crea un bloque de N sesiones efectivas (por defecto 7) que inicia hoy (Sesión 1/N). */
+export async function createTrainingBlock(
+  type: WeekType,
+  from: Date = new Date(),
+  targetSessions: number = TRAINING_BLOCK_SESSIONS,
+): Promise<TrainingBlock> {
   const db = await getDatabase();
   const start = startOfLocalDay(from);
+  const cleanTarget = Math.max(1, Math.round(targetSessions || TRAINING_BLOCK_SESSIONS));
   const block: TrainingBlock = {
     id: Crypto.randomUUID(),
     type,
     startDate: start.toISOString(),
     endDate: addLocalDays(start, TRAINING_BLOCK_DAYS).toISOString(),
     sessionCount: 0,
-    targetSessions: TRAINING_BLOCK_SESSIONS,
+    targetSessions: cleanTarget,
   };
   await db.runAsync(
     'INSERT INTO training_blocks (id, type, start_date, end_date, sessions_count, target_sessions) VALUES (?, ?, ?, ?, 0, ?);',
-    [block.id, block.type, block.startDate, block.endDate, TRAINING_BLOCK_SESSIONS],
+    [block.id, block.type, block.startDate, block.endDate, cleanTarget],
   );
   return block;
+}
+
+/** Actualiza la cuota objetivo de sesiones (`target_sessions`) de un bloque existente. */
+export async function updateTrainingBlockTargetSessions(
+  blockId: string,
+  targetSessions: number,
+): Promise<void> {
+  const db = await getDatabase();
+  const cleanTarget = Math.max(1, Math.round(targetSessions || TRAINING_BLOCK_SESSIONS));
+  await db.runAsync('UPDATE training_blocks SET target_sessions = ? WHERE id = ?;', [
+    cleanTarget,
+    blockId,
+  ]);
 }
 
 /**
@@ -716,6 +805,7 @@ export async function guardarSesion(sesion: SesionEntrenamiento): Promise<void> 
           setNumber: setIndex + 1,
           reps: Number(set.reps),
           weight: Math.max(0, Number(set.pesoKg ?? 0)),
+          setType: set.setType ?? 'NORMAL',
         })),
     ),
     sesion.cardio
@@ -810,25 +900,21 @@ export async function saveWorkout(
       for (const ex of validExercises) {
         const exId = ex.exerciseId ?? ex.exerciseName;
         const existing = groupedExercises.get(exId);
+        const setItem = {
+          id: ex.setId ?? Crypto.randomUUID(),
+          reps: toStrictIntegerReps(ex.reps),
+          pesoKg: toStrictRealWeight(ex.weight),
+          setType: ex.setType ?? 'NORMAL',
+        };
         if (existing) {
-          existing.series.push({
-            id: ex.setId ?? Crypto.randomUUID(),
-            reps: toStrictIntegerReps(ex.reps),
-            pesoKg: toStrictRealWeight(ex.weight),
-          });
+          existing.series.push(setItem);
         } else {
           groupedExercises.set(exId, {
             id: exId,
             catalogExerciseId: ex.catalogExerciseId,
             nombre: ex.exerciseName,
             grupoMuscular: ex.muscleGroup,
-            series: [
-              {
-                id: ex.setId ?? Crypto.randomUUID(),
-                reps: toStrictIntegerReps(ex.reps),
-                pesoKg: toStrictRealWeight(ex.weight),
-              },
-            ],
+            series: [setItem],
           });
         }
       }
@@ -868,12 +954,13 @@ export async function saveWorkout(
       // 2. Inserción masiva (Bulk Insert) de ejercicios y series en 'exercise_logs' con tipos blindados (INTEGER y REAL)
       if (validExercises.length > 0) {
         const placeholders = validExercises
-          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .join(', ');
         const values = validExercises.flatMap((exercise, index) => {
           const exId = exercise.exerciseId ?? Crypto.randomUUID();
           const setId = exercise.setId ?? Crypto.randomUUID();
-          const isPr = prSetIds.has(`${exId}::${setId}`) ? 1 : 0;
+          const setType: SetType = exercise.setType ?? 'NORMAL';
+          const isPr = setType === 'NORMAL' && prSetIds.has(`${exId}::${setId}`) ? 1 : 0;
           return [
             workoutId,
             exId,
@@ -886,12 +973,13 @@ export async function saveWorkout(
             toStrictIntegerReps(exercise.reps),
             toStrictRealWeight(exercise.weight),
             isPr,
+            setType,
           ];
         });
         await db.runAsync(
           `INSERT INTO exercise_logs (
             workout_id, exercise_id, catalog_exercise_id, exercise_order, exercise_name,
-            muscle_group, set_id, set_number, reps, weight, is_pr
+            muscle_group, set_id, set_number, reps, weight, is_pr, set_type
           ) VALUES ${placeholders};`,
           values,
         );
@@ -1017,7 +1105,8 @@ export async function getWorkoutDetails(workoutId: number | string): Promise<Wor
       `SELECT workout_id AS workoutId, exercise_id AS exerciseId,
               exercise_order AS exerciseOrder, exercise_name AS exerciseName,
               muscle_group AS muscleGroup, set_id AS setId,
-              set_number AS setNumber, reps, weight
+              set_number AS setNumber, reps, weight,
+              COALESCE(set_type, 'NORMAL') AS setType
        FROM exercise_logs WHERE workout_id = ?
        ORDER BY exercise_order, set_number;`,
       [workout.id],
@@ -1112,7 +1201,8 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
                     'id', s.set_id,
                     'reps', CAST(s.reps AS INTEGER),
                     'pesoKg', CAST(s.weight AS REAL),
-                    'isPr', COALESCE(s.is_pr, 0)
+                    'isPr', COALESCE(s.is_pr, 0),
+                    'setType', COALESCE(s.set_type, 'NORMAL')
                   )
                 )
                 FROM exercise_logs s 
@@ -1194,6 +1284,7 @@ export async function obtenerSesiones(limit = 50, offset = 0): Promise<SesionEnt
                     reps: toStrictIntegerReps(s.reps),
                     pesoKg: toStrictRealWeight(s.pesoKg),
                     isPr: Boolean(s.isPr),
+                    setType: (s.setType as SetType) ?? 'NORMAL',
                   }))
                 : [],
             }));

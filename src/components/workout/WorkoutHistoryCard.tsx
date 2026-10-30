@@ -66,12 +66,19 @@ export const WorkoutHistoryCard = ({
         sets: (ex.series ?? []).map((s, sIdx) => {
           const reps = Number(s.reps ?? 0);
           const weight = Number(s.pesoKg ?? 0);
+          const setType = s.setType ?? 'NORMAL';
           return {
             id: s.id || `set-${idx}-${sIdx}`,
             setNumber: sIdx + 1,
             reps,
             weight,
-            isPr: Boolean(s.isPr) && reps >= 1 && reps <= 5 && weight > 0,
+            setType,
+            isPr:
+              setType === 'NORMAL' &&
+              Boolean(s.isPr) &&
+              reps >= 1 &&
+              reps <= 5 &&
+              weight > 0,
           };
         }),
       }));
@@ -85,12 +92,19 @@ export const WorkoutHistoryCard = ({
         sets: (ex.sets ?? []).map((s: any, sIdx: number) => {
           const reps = Number(s.reps ?? 0);
           const weight = Number(s.weight ?? s.pesoKg ?? 0);
+          const setType = s.setType ?? 'NORMAL';
           return {
             id: s.id || `set-${idx}-${sIdx}`,
             setNumber: sIdx + 1,
             reps,
             weight,
-            isPr: Boolean(s.isPr) && reps >= 1 && reps <= 5 && weight > 0,
+            setType,
+            isPr:
+              setType === 'NORMAL' &&
+              Boolean(s.isPr) &&
+              reps >= 1 &&
+              reps <= 5 &&
+              weight > 0,
           };
         }),
       }));
@@ -260,6 +274,20 @@ export const WorkoutHistoryCard = ({
                     >
                       <View style={styles.setLeftGroup}>
                         <Text style={styles.setIndexText}>Serie {s.setNumber}</Text>
+                        {s.setType === 'DROP_SET' && (
+                          <View style={[styles.setPrTag, { backgroundColor: COLORS.dropSetIndicator }]}>
+                            <Text style={[styles.setPrTagText, { color: COLORS.dropSetAccent }]}>
+                              Drop Set
+                            </Text>
+                          </View>
+                        )}
+                        {s.setType === 'WARMUP' && (
+                          <View style={[styles.setPrTag, { backgroundColor: COLORS.warmupIndicator }]}>
+                            <Text style={[styles.setPrTagText, { color: COLORS.warmupAccent }]}>
+                              Calentamiento
+                            </Text>
+                          </View>
+                        )}
                         {s.isPr && (
                           <View style={styles.setPrTag}>
                             <Trophy size={11} color="#D97706" />

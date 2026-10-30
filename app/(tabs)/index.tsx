@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect } from 'expo-router';
 import { Settings, Maximize, RotateCcw, Info } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
-import { TimerDisplay } from '../../src/components/workout/TimerDisplay';
+import { SessionStopwatchDisplay } from '../../src/components/workout/TimerDisplay';
 import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
 import { CardioCard } from '../../src/components/workout/CardioCard';
 import { WorkoutSummaryModal } from '../../src/components/workout/WorkoutSummaryModal';
@@ -49,11 +49,22 @@ export default function ActiveWorkoutScreen() {
   const startTimestamp = useSessionStore((s) => s.startTimestamp);
   const currentBlock = useSessionStore((s) => s.currentBlock);
   const startNewBlock = useSessionStore((s) => s.startNewBlock);
+  const activeWeek = useSessionStore((s) => s.activeWeek);
+  const currentSessionIndex = useSessionStore((s) => s.currentSessionIndex);
+  const activeSessionNote = useSessionStore((s) => s.activeSessionNote);
+  const loadPlanningContext = useSessionStore((s) => s.loadPlanningContext);
 
-  // Reevaluar el bloque actual cada vez que la pantalla gana el foco (ej. tras borrar en Historial)
+  useEffect(() => {
+    void loadPlanningContext();
+  }, [loadPlanningContext]);
+
+  // Reevaluar el bloque actual y la planificación cada vez que la pantalla gana el foco
   useFocusEffect(
     useCallback(() => {
-      void useSessionStore.getState().initBlock();
+      void (async () => {
+        await useSessionStore.getState().initBlock();
+        await useSessionStore.getState().loadPlanningContext();
+      })();
     }, []),
   );
 
@@ -121,12 +132,13 @@ export default function ActiveWorkoutScreen() {
         ...ex,
         sets: ex.sets
           .filter((s) => {
-            const reps = parseInt(s.reps, 10) || 0;
-            const weight = s.weight === '' ? 0 : parseFloat(s.weight);
+            const reps = parseInt(String(s.reps), 10) || 0;
+            const weight = String(s.weight) === '' ? 0 : parseFloat(String(s.weight));
             return reps > 0 && Number.isFinite(weight) && weight >= 0;
           })
           .map((s) => ({
             ...s,
+            setType: s.setType ?? 'NORMAL',
             isCompleted: true,
           })),
       }))
@@ -197,14 +209,15 @@ export default function ActiveWorkoutScreen() {
           );
           const validSets = ex.sets
             .filter((s) => {
-              const reps = parseInt(s.reps, 10) || 0;
-              const weight = s.weight === '' ? 0 : parseFloat(s.weight);
+              const reps = parseInt(String(s.reps), 10) || 0;
+              const weight = String(s.weight) === '' ? 0 : parseFloat(String(s.weight));
               return reps > 0 && Number.isFinite(weight) && weight >= 0;
             })
             .map((s) => ({
               id: s.id,
-              reps: parseInt(s.reps, 10) || 0,
-              pesoKg: Math.max(0, parseFloat(s.weight) || 0),
+              reps: parseInt(String(s.reps), 10) || 0,
+              pesoKg: Math.max(0, parseFloat(String(s.weight)) || 0),
+              setType: s.setType ?? 'NORMAL',
             }));
 
           return {
@@ -244,8 +257,10 @@ export default function ActiveWorkoutScreen() {
       setModalSummary((prev) => (prev ? { ...prev, prs: achievedPrs } : prev));
 
       await WorkoutRepository.saveSession(session, startTimestamp);
-      // Actualizar contador de sesiones (1/7..7/7) y evaluar sugerencia de descarga al llegar a 7/7
+      // Evaluar cierre de semana planificada (avanza a la siguiente si completó la cuota) y sincronizar bloque
+      await useSessionStore.getState().evaluateBlockCompletion();
       await useSessionStore.getState().initBlock();
+      await useSessionStore.getState().loadPlanningContext();
     } catch (error) {
       console.error('Error al guardar sesión:', error);
       Alert.alert(
@@ -282,8 +297,42 @@ export default function ActiveWorkoutScreen() {
           </View>
         </View>
 
-        {/* Banner informativo no bloqueante al completar 7/7 sesiones de Sobrecarga */}
-        {currentBlock &&
+        {/* Módulo de Planificación Condicional (Opcional: solo aparece si el usuario configuró su mesociclo) */}
+        {activeWeek && (
+          <View style={styles.planningBannerCard}>
+            <View style={styles.planningHeaderRow}>
+              <Text style={styles.planningWeekEyebrow}>
+                SEMANA {activeWeek.week_number} • {activeWeek.type} (Sesión{' '}
+                {currentSessionIndex}/{activeWeek.total_planned_sessions})
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.navigate('/planificacion')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.planningEditLink}>Editar plan</Text>
+              </TouchableOpacity>
+            </View>
+
+            {activeWeek.week_comment ? (
+              <Text style={styles.planningObjectiveText}>
+                Objetivo: {activeWeek.week_comment}
+              </Text>
+            ) : null}
+
+            {activeSessionNote ? (
+              <View style={styles.planningSessionNoteBox}>
+                <Text style={styles.planningSessionNoteText}>
+                  Nota Táctica (Sesión {currentSessionIndex}/
+                  {activeWeek.total_planned_sessions}): {activeSessionNote}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
+        {/* Banner informativo no bloqueante al completar 7/7 sesiones de Sobrecarga (modo manual) */}
+        {!activeWeek &&
+          currentBlock &&
           currentBlock.type === 'carga' &&
           (currentBlock.sessionCount ?? 0) >=
             (currentBlock.targetSessions ?? BLOCK_TARGET_SESSIONS) && (
@@ -332,7 +381,7 @@ export default function ActiveWorkoutScreen() {
           </View>
 
           <View style={styles.timerCenter}>
-            <TimerDisplay />
+            <SessionStopwatchDisplay />
           </View>
 
           <TouchableOpacity
@@ -591,6 +640,34 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.md,
   },
+  exercisesHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  restQuickBtn: {
+    backgroundColor: COLORS.timerSurface,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  restQuickBtnText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  floatingRestBar: {
+    position: 'absolute',
+    left: SPACING.md,
+    right: SPACING.md,
+    bottom: SPACING.md,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
   outlineButton: {
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -666,6 +743,51 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: SPACING.md,
     marginBottom: SPACING.lg,
+  },
+  planningBannerCard: {
+    backgroundColor: COLORS.timerSurface,
+    padding: SPACING.md,
+    borderRadius: 14,
+    marginBottom: SPACING.lg,
+  },
+  planningHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  planningWeekEyebrow: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    flex: 1,
+  },
+  planningEditLink: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  planningObjectiveText: {
+    color: COLORS.textInverted,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  planningSessionNoteBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  planningSessionNoteText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
   },
   deloadBannerHeader: {
     flexDirection: 'row',

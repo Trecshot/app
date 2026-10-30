@@ -1,4 +1,17 @@
-import type { Ejercicio, Serie, WeekType, WorkoutExerciseBlock } from '../../types';
+import type { Ejercicio, Serie, SetType, WeekType, WorkoutExerciseBlock, WorkoutSet } from '../../types';
+
+/**
+ * Excluye explícitamente las series de calentamiento (WARMUP) y drop sets (DROP_SET)
+ * antes de procesar el cálculo algorítmico del récord absoluto.
+ */
+export const calculateAbsolutePR = (sets: WorkoutSet[]): number => {
+  const effectiveSets = sets.filter(
+    (set) => (set.setType ?? 'NORMAL') === 'NORMAL' && set.isCompleted,
+  );
+  if (effectiveSets.length === 0) return 0;
+
+  return Math.max(...effectiveSets.map((s) => toStrictRealWeight(s.weight)));
+};
 
 /**
  * Categoría de validación de una serie frente al historial de SQLite:
@@ -76,7 +89,9 @@ export function isSetAbsolutePR(
   reps: number,
   pesoKg: number,
   pesoMaximoHistoricoDelEjercicio: number,
+  setType: SetType = 'NORMAL',
 ): boolean {
+  if (setType !== 'NORMAL') return false;
   const cleanReps = toStrictIntegerReps(reps);
   const cleanWeight = toStrictRealWeight(pesoKg);
   const cleanHistoricalMax = toStrictRealWeight(pesoMaximoHistoricoDelEjercicio);
@@ -120,6 +135,12 @@ export function evaluateSessionPRs(
     let peakPrSetIndex = -1;
 
     exercise.series.forEach((serie, idx) => {
+      const setType: SetType = serie.setType ?? 'NORMAL';
+      // Excluir explícitamente WARMUP y DROP_SET del cálculo de PR Absoluto
+      if (setType !== 'NORMAL') {
+        return;
+      }
+
       const reps = toStrictIntegerReps(serie.reps);
       const pesoKg = toStrictRealWeight(serie.pesoKg);
 
@@ -154,12 +175,14 @@ export function evaluateSessionPRs(
     const evaluatedSets: EvaluatedSetRecord[] = exercise.series.map((serie, idx) => {
       const reps = toStrictIntegerReps(serie.reps);
       const pesoKg = toStrictRealWeight(serie.pesoKg);
-      const isPr = achievedAbsolutePr && idx === peakPrSetIndex;
+      const setType: SetType = serie.setType ?? 'NORMAL';
+      const isPr = setType === 'NORMAL' && achievedAbsolutePr && idx === peakPrSetIndex;
 
       return {
         id: serie.id,
         reps,
         pesoKg,
+        setType,
         isPr,
         category: isPr ? 'PR_ABSOLUTO' : 'NORMATIVO',
         historicalMaxWeight: pesoMaximoHistoricoDelEjercicio,
@@ -201,6 +224,7 @@ export function countPRsForActiveWorkoutBlocks(
       id: s.id,
       reps: toStrictIntegerReps(s.reps),
       pesoKg: toStrictRealWeight(s.weight),
+      setType: s.setType ?? 'NORMAL',
     })),
   }));
 
