@@ -1,16 +1,20 @@
-import { useState, useEffect, useRef, useCallback, SetStateAction, Dispatch } from 'react';
-import { AppState, Platform } from 'react-native';
+import { useState, useEffect, useCallback, SetStateAction, Dispatch } from 'react';
+import { AppState, Platform, Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { requireOptionalNativeModule } from 'expo';
+import { isRunningInExpoGo, requireOptionalNativeModule } from 'expo';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useSessionStore } from '../store/useSessionStore';
-import type { Audio } from 'expo-av';
 import type { AudioPlayer } from 'expo-audio';
 
 const REST_TIMER_STORAGE_KEY = 'workout-rest-timer-storage-v1';
 const REST_KEEP_AWAKE_TAG = 'workout-rest-timer';
-const ANDROID_REST_CHANNEL_ID = 'workout-rest-timer-channel';
+const IS_EXPO_GO = isRunningInExpoGo();
+// Los canales de Android son inmutables una vez creados: se usa un ID versión v3 y sonido adaptado a Expo Go vs APK.
+const ANDROID_REST_CHANNEL_ID = IS_EXPO_GO
+  ? 'rest-timer-default-v3'
+  : 'rest-timer-bell-v3';
+const REST_NOTIFICATION_SOUND = IS_EXPO_GO ? 'default' : 'bell.mp3';
 
 export interface RestTimerOption {
   label: string;
@@ -39,7 +43,7 @@ export const formatRestDuration = (sec: number): string => {
 
 // Verificación previa de módulos nativos antes de llamar require() para evitar RedBox en Expo Go
 let notificationHandlerConfigured = false;
-let notificationChannelConfigured = false;
+let notificationChannelPromise: Promise<void> | null = null;
 
 function getNotificationsModule(): typeof import('expo-notifications') | null {
   try {
@@ -51,7 +55,6 @@ function getNotificationsModule(): typeof import('expo-notifications') | null {
       notificationHandlerConfigured = true;
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
-          shouldShowAlert: true,
           shouldShowBanner: true,
           shouldShowList: true,
           shouldPlaySound: true,
@@ -71,54 +74,99 @@ async function ensureNotificationChannelAndPermissions(): Promise<
   const Notifications = getNotificationsModule();
   if (!Notifications) return null;
 
-  try {
-    if (Platform.OS === 'android' && !notificationChannelConfigured) {
-      notificationChannelConfigured = true;
-      await Notifications.setNotificationChannelAsync(ANDROID_REST_CHANNEL_ID, {
-        name: 'Temporizador de Descanso',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        sound: 'default',
-        enableVibrate: true,
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      });
-    }
+  if (!notificationChannelPromise) {
+    notificationChannelPromise = (async () => {
+      try {
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync(ANDROID_REST_CHANNEL_ID, {
+            name: 'Temporizador de Descanso',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 400, 200, 400],
+            sound: REST_NOTIFICATION_SOUND,
+            enableVibrate: true,
+            bypassDnd: true,
+            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+          });
+        }
 
-    const perms = await Notifications.getPermissionsAsync();
-    if (perms.status !== 'granted') {
-      await Notifications.requestPermissionsAsync();
-    }
-  } catch {
-    // Continuar de forma segura en Expo Go si los permisos o canales no están disponibles
+        const perms = await Notifications.getPermissionsAsync();
+        if (perms.status !== 'granted') {
+          await Notifications.requestPermissionsAsync({
+            ios: {
+              allowAlert: true,
+              allowBadge: false,
+              allowSound: true,
+            },
+          });
+        }
+      } catch {
+        // Continuar de forma segura si los permisos o canales no están disponibles
+      }
+    })();
   }
 
+  await notificationChannelPromise;
   return Notifications;
 }
 
-function getLegacyAudioModule(): typeof Audio | null {
-  try {
-    if (!requireOptionalNativeModule('ExponentAV')) return null;
+// Reproductor de audio ÚNICO compartido por toda la app (evita agotar los decodificadores nativos
+// cuando hay múltiples filas de series montadas simultáneamente).
+let sharedBellPlayer: AudioPlayer | null = null;
+let audioModeConfigured = false;
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const av = require('expo-av') as { Audio: typeof Audio };
-    return av?.Audio ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function createModernAudioPlayer(): AudioPlayer | null {
+function getBellPlayer(): AudioPlayer | null {
+  if (sharedBellPlayer) return sharedBellPlayer;
   try {
     if (!requireOptionalNativeModule('ExpoAudio')) return null;
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const expoAudio = require('expo-audio') as typeof import('expo-audio');
+    if (!audioModeConfigured && expoAudio?.setAudioModeAsync) {
+      audioModeConfigured = true;
+      void expoAudio
+        .setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+          interruptionModeAndroid: 'duckOthers',
+          interruptionMode: 'mixWithOthers',
+        })
+        .catch(() => undefined);
+    }
     if (expoAudio?.createAudioPlayer) {
-      return expoAudio.createAudioPlayer(require('../../assets/bell.mp3'));
+      sharedBellPlayer = expoAudio.createAudioPlayer(require('../../assets/bell.mp3'));
+      sharedBellPlayer.volume = 1.0;
+      return sharedBellPlayer;
     }
     return null;
   } catch {
     return null;
+  }
+}
+
+function playBellAndVibrate() {
+  try {
+    Vibration.vibrate([0, 350, 150, 350]);
+  } catch {
+    // Ignorar si Vibration falla
+  }
+  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+    () => undefined,
+  );
+
+  const player = getBellPlayer();
+  if (!player) return;
+  try {
+    void player.seekTo(0).catch(() => undefined);
+    player.play();
+  } catch {
+    // Si el reproductor perdió el contexto nativo, recrearlo una vez
+    sharedBellPlayer = null;
+    const retryPlayer = getBellPlayer();
+    try {
+      retryPlayer?.play();
+    } catch {
+      // Ignorar fallo secundario
+    }
   }
 }
 
@@ -146,7 +194,6 @@ type TimerListener = (
 ) => void;
 
 const timerSubscribers = new Set<TimerListener>();
-const completionCallbacks = new Set<() => void>();
 
 async function persistRestTimerState(): Promise<void> {
   try {
@@ -186,21 +233,14 @@ function syncTimerFromClock() {
   const remainingSec = Math.max(0, Math.ceil(remainingMs / 1000));
 
   if (remainingSec <= 0) {
-    const finishedJustNow = remainingMs > -5000;
+    const finishedJustNow = remainingMs > -8000;
     sharedEndTimestamp = null;
     notifyTimerSubscribers(0, false, null, sharedDurationSeconds);
     void persistRestTimerState();
     void deactivateKeepAwake(REST_KEEP_AWAKE_TAG).catch(() => undefined);
 
     if (finishedJustNow) {
-      // Disparar alerta háptica y sonora en el primer suscriptor disponible
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
-        () => undefined,
-      );
-      const firstCallback = completionCallbacks.values().next().value;
-      if (firstCallback) {
-        firstCallback();
-      }
+      playBellAndVibrate();
     }
     stopGlobalTickerIfIdle();
   } else if (remainingSec !== sharedTimeLeft) {
@@ -215,7 +255,7 @@ function syncTimerFromClock() {
 
 function ensureGlobalTicker() {
   if (!globalIntervalId) {
-    globalIntervalId = setInterval(syncTimerFromClock, 500);
+    globalIntervalId = setInterval(syncTimerFromClock, 400);
   }
   if (!appStateSubscriptionInstalled) {
     appStateSubscriptionInstalled = true;
@@ -237,6 +277,10 @@ function stopGlobalTickerIfIdle() {
 async function hydrateRestTimerIfNeeded(): Promise<void> {
   if (isHydrated) return;
   isHydrated = true;
+
+  // Precargar canal de notificaciones y reproductor único al iniciar la app
+  void ensureNotificationChannelAndPermissions();
+  getBellPlayer();
 
   try {
     const raw = await AsyncStorage.getItem(REST_TIMER_STORAGE_KEY);
@@ -281,9 +325,11 @@ async function scheduleRestNotification(seconds: number): Promise<void> {
     if (seconds > 0) {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: '⏱ Descanso Finalizado',
-          body: 'Es hora de tu siguiente serie.',
-          sound: true,
+          title: '⏱ ¡Descanso Finalizado!',
+          body: 'Es hora de comenzar tu siguiente serie.',
+          sound: REST_NOTIFICATION_SOUND,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          vibrate: [0, 400, 200, 400],
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -317,8 +363,6 @@ export const useWorkoutTimer = (): UseWorkoutTimerReturn => {
   const [durationSeconds, setDurationSecondsInternal] = useState<number>(
     sharedDurationSeconds,
   );
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const modernPlayerRef = useRef<AudioPlayer | null>(null);
 
   // Hidratar estado en segundo plano y suscribir cambios
   useEffect(() => {
@@ -338,62 +382,6 @@ export const useWorkoutTimer = (): UseWorkoutTimerReturn => {
     timerSubscribers.add(listener);
     return () => {
       timerSubscribers.delete(listener);
-    };
-  }, []);
-
-  // Precarga del buffer de audio (soporta tanto ExpoAudio en SDK 58 como ExponentAV en dev builds)
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const AudioApi = getLegacyAudioModule();
-        if (AudioApi?.Sound?.createAsync) {
-          const { sound } = await AudioApi.Sound.createAsync(
-            require('../../assets/bell.mp3'),
-          );
-          if (mounted) {
-            soundRef.current = sound;
-          } else {
-            await sound.unloadAsync();
-          }
-          return;
-        }
-
-        const player = createModernAudioPlayer();
-        if (mounted && player) {
-          modernPlayerRef.current = player;
-        } else if (player) {
-          player.remove();
-        }
-      } catch {
-        // Fallback silencioso si el hardware de audio no está disponible
-      }
-    })();
-
-    const playCompletionSound = () => {
-      if (soundRef.current) {
-        void soundRef.current.replayAsync().catch(() => undefined);
-      } else if (modernPlayerRef.current) {
-        try {
-          void modernPlayerRef.current.seekTo(0);
-          modernPlayerRef.current.play();
-        } catch {
-          // Ignorar fallo de reproducción
-        }
-      }
-    };
-
-    completionCallbacks.add(playCompletionSound);
-
-    return () => {
-      mounted = false;
-      completionCallbacks.delete(playCompletionSound);
-      void soundRef.current?.unloadAsync().catch(() => undefined);
-      try {
-        modernPlayerRef.current?.remove();
-      } catch {
-        // Ignorar al desmontar
-      }
     };
   }, []);
 

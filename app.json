@@ -18,7 +18,14 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.trecshot.gymtracker"
+      "package": "com.trecshot.gymtracker",
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -29,7 +36,15 @@
       "expo-status-bar",
       "expo-splash-screen",
       "expo-font",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/bell.mp3"
+          ]
+        }
+      ]
     ],
     "extra": {
       "eas": {
