@@ -1,0 +1,268 @@
+================================================================================
+INFORME TECNICO DEL CODIGO COMPLETO: MI ENTRENAMIENTO (GYM-TRACKER)
+================================================================================
+Fecha de generacion: 1 de noviembre de 2026
+Ecosistema: React Native / Expo SDK 58 (TypeScript Estricto)
+Arquitectura: Offline-First (SQLite local) + Expo Router + Zustand
+Repositorio Git: https://github.com/Trecshot/app.git
+
+================================================================================
+1. PROPOSITO Y FILOSOFIA DE LA APLICACION
+================================================================================
+"Mi Entrenamiento" es una aplicacion movil de alto rendimiento orientada a la
+sobrecarga progresiva y periodizacion de fuerza. A diferencia de las apps
+convencionales con servidores externos:
+- Es 100% autonoma y offline: La base de datos relacional reside en el propio
+  dispositivo (SQLite).
+- Es flexible y no bloqueante: Permite entrenar en modo completamente libre
+  sin forzar rutinas previas, o estructurar mesociclos de hasta 10 semanas
+  con transicion automatica entre bloques de Carga y Descarga.
+- Medicion estricta de Records Personales (PRs): Discrimina series efectivas
+  de series de calentamiento y drop sets para evitar metricas falsas.
+- Temporizador nativo inter-series: Opera con el hardware del kernel de Android
+  para sonar y vibrar aunque la pantalla este apagada o el telefono en reposo.
+
+================================================================================
+2. ARQUITECTURA DE NAVEGACION (EXPO ROUTER - 3 PESTANAS)
+================================================================================
+El enrutador base utiliza Expo Router dentro del directorio `app/`:
+
+- app/_layout.tsx (Layout Raiz):
+  * Retiene el Splash Screen oficial hasta que SQLite y las migraciones completan
+    su inicializacion con `WorkoutRepository.initSchema()`.
+  * Configura en el arranque el canal de notificaciones prioritario ('descanso-series')
+    mediante `configurarCanalNotificaciones()`.
+  * Escucha cambios de ciclo de vida (`AppState`) para reevaluar bloques al volver
+    a primer plano.
+  * Renderiza `NewBlockModal` como modal global para cambio de semanas.
+
+- app/(tabs)/_layout.tsx (Layout del Menu Inferior):
+  * Define la navegacion por 3 pestañas principales accesibles en todo momento:
+    1. "Entrenar" (app/(tabs)/index.tsx): Icono de mancuerna.
+    2. "Historial" (app/(tabs)/history.tsx): Icono de reloj/historial.
+    3. "Planificacion" (app/(tabs)/planificacion.tsx): Icono de calendario.
+  * Barra estilizada con compensacion dinamica de area segura (`insets.bottom`).
+
+- app/(tabs)/index.tsx (Pantalla Viva de Entrenamiento):
+  * Cabecera con indicador de bloque activo (`BlockIndicator`).
+  * Modulo de Planificacion Condicional: Si existe una semana activa configurada,
+    despliega el objetivo semanal y la nota tactica exacta de la sesion en curso
+    (ej. Sesion 2/7) antes de iniciar los levantamientos.
+  * Tarjeta de Cronometro general de la sesion activa (`SessionStopwatchDisplay`).
+  * Selector multi-chip de enfoque muscular de la sesion (`SessionFocus`).
+  * Listado dinamico de ejercicios con tarjetas independientes (`ExerciseCard`).
+  * Filas de series con selector de tipo de serie (`SetRow`).
+  * Seccion de Cardio adicional con medicion de minutos, velocidad, km o saltos.
+  * Notas de contexto de la sesion (fatiga, sensaciones, descanso previo).
+  * Modal de finalizacion inmediata (`WorkoutSummaryModal`) con computo de PRs.
+
+- app/(tabs)/history.tsx (Historial y Auditoria):
+  * Consulta cronologica de todas las sesiones pasadas en SQLite.
+  * Auditoria de volumen total acumulado, desglose de series y conteo de PRs.
+  * Soporte para eliminacion transaccional blindada de entrenamientos antiguos.
+
+- app/(tabs)/planificacion.tsx (Planificacion del Mesociclo):
+  * Administrador de 1 a 10 semanas de horizonte de entrenamiento.
+  * Conmutador flexible en tiempo real de CARGA o DESCARGA por semana.
+  * Asignacion de cuota de sesiones por bloque (4, 5, 6 o 7 sesiones).
+  * Campo de texto libre para el Objetivo/Comentario Semanal a nivel bloque.
+  * Desplegable de Notas Tacticas por Sesion Ordinal (Sesion 1/N a N/N).
+  * Plantillas rapidas (ej. "5 Carga + 1 Descarga" o "3 Carga + 1 Descarga").
+  * Opcion de desactivar la planificacion para volver a modo 100% manual libre.
+
+================================================================================
+3. CAPA DE BASE DE DATOS Y PERSISTENCIA (database.ts)
+================================================================================
+Archivo: database.ts
+Motor: SQLite ('gym_tracker.db') mediante expo-sqlite con WAL Mode y Foreign Keys.
+
+Tablas Principales:
+1. `exercise_catalog`:
+   - Catalogo oficial de ejercicios clasificados por grupo muscular.
+   - Sincronizado automaticamente mediante seeding relacional.
+2. `training_blocks`:
+   - Bloques contabilizados por sesiones efectivas completadas (`sessions_count`
+     frente a `target_sessions`, por defecto 7).
+   - Tipos: 'carga' o 'descarga'.
+3. `workouts`:
+   - Cabecera del entrenamiento (fecha, tipoSemana, cycleWeek, notas, duracion,
+     sessionFocus en formato JSON, block_id, prs_count).
+4. `workout_sets`:
+   - Registro individual de series (id, exercise_id, weight, reps, is_completed, set_type).
+5. `exercise_logs`:
+   - Historico detallado de cada serie completada.
+   - Afinidad de datos estricta: `reps INTEGER` y `weight REAL`. Esto previene
+     errores de comparacion alfabetica en consultas agregadas como `MAX(weight)`.
+   - Columna `set_type`: 'NORMAL', 'WARMUP' o 'DROP_SET'.
+   - Columna `is_pr`: 1 si la serie batio el record personal historico, 0 si no.
+6. `cardio_logs` y `cardio_blocks`:
+   - Registro de sesiones de cardio vinculadas al workout con `ON DELETE CASCADE`.
+7. `mesocycle_weeks`:
+   - Semanas planificadas del mesociclo (1 a 10 semanas).
+   - Columnas: id, week_number (CHECK 1..10), type ('CARGA' o 'DESCARGA'),
+     total_planned_sessions, week_comment, is_current (1 si es la semana activa).
+8. `planned_session_notes`:
+   - Notas tacticas por numero ordinal de sesion (1 a N).
+   - Clave foranea hacia `mesocycle_weeks(id)` con `ON DELETE CASCADE`.
+
+Migraciones Automatizadas:
+- v1 a v7: Implementan afinidad numerica, correccion de claves foraneas de cardio,
+  calculo de ciclo ISO, soporte de bloques y calculo historico de PRs.
+- ensureMesocycleTables: Garantiza la existencia de las tablas de planificacion sin
+  afectar ninguna sesion previamente registrada.
+
+================================================================================
+4. REPOSITORIOS DE ACCESO A DATOS (src/db/repositories/)
+================================================================================
+- WorkoutRepository.ts:
+  * `saveSession`: Ejecuta una transaccion atomica completa en SQLite:
+    1. Resuelve o crea el bloque de sesiones vigente.
+    2. Calcula los PRs absolutos de la sesion antes de escribir en disco.
+    3. Inserta el registro en `workouts`.
+    4. Realiza bulk insert en `exercise_logs` con tipos blindados.
+    5. Persiste bloques de cardio.
+    6. Actualiza el contador `sessions_count` del bloque.
+  * `deleteWorkoutById`: Eliminacion transaccional limpia sin fallas de llaves
+    foraneas ni huerfanos.
+  * `calculateSessionPRsCount`: Valida en memoria los PRs previos al guardado.
+  * `addSet`: Inserta o actualiza una serie individual con su SetType.
+
+- MesocycleRepository.ts:
+  * `getAllWeeks` / `getActiveWeek` / `setActiveWeek`: Control de semanas del mesociclo.
+  * `advanceToNextWeek`: Transaccion que desmarca la semana actual y marca como activa
+    la semana siguiente (week_number + 1) al completar las sesiones del bloque.
+  * `getNoteForSession`: Consulta la directriz tactica asignada a una sesion ordinal.
+  * `upsertSessionNote` / `deleteWeek` / `clearMesocycle`: Mantenimiento y reordenamiento
+    automatico de indices.
+
+================================================================================
+5. GESTION DE ESTADO GLOBAL (src/store/)
+================================================================================
+- useWorkoutStore.ts (Zustand):
+  * Mantiene el borrador interactivo del entrenamiento en curso.
+  * Agrega/edita ejercicios, series, pesos, repeticiones y descansos especificos.
+  * Maneja `updateSetType` para alternar entre Normal, Warmup y Drop Set.
+  * Persiste notas de fatiga y sensaciones fisicas de la sesion.
+
+- useSessionStore.ts (Zustand + AsyncStorage):
+  * Controla el Cronometro General de la sesion con marcas de tiempo reales
+    (`startTimestamp`, `accumulatedMs`) que continuan corriendo en segundo plano.
+  * Sincroniza el bloque activo (`currentBlock`) con la base de datos SQLite.
+  * `loadPlanningContext`: Vincula la semana activa del mesociclo, calcula el numero
+    de sesion ordinal (ej. Sesion 3/7) y carga la nota tactica correspondiente.
+  * `evaluateBlockCompletion`: Detecta cuando se completan las sesiones del bloque
+    (ej. 7/7) y transiciona automaticamente a la siguiente semana planificada.
+
+================================================================================
+6. REGLAS DE NEGOCIO: MOTOR DE PRS ABSOLUTOS (src/utils/prEngine.ts)
+================================================================================
+El algoritmo de PRs garantiza absoluta rigurosidad en los registros:
+- Solo computan series efectivas: `set.setType === 'NORMAL'`.
+- Quedan explícitamente EXCLUIDAS del cálculo:
+  * Series de aproximación / calentamiento (`WARMUP`).
+  * Series descendentes / al fallo (`DROP_SET`).
+- Rango de repeticiones de fuerza: 1 a 5 repeticiones con peso superior al
+  maximo historico registrado para ese ejercicio en catalogo.
+- Las semanas de Descarga ('descarga') jamas computan PRs para no desvirtuar
+  las marcas con intensidades recuperativas.
+
+================================================================================
+7. TEMPORIZADOR INTER-SERIES Y ALARMAS DE HARDWARE (KERNEL ALARM)
+================================================================================
+Archivos:
+- src/hooks/useWorkoutTimer.ts
+- src/utils/restNotifications.ts
+- src/components/workout/TimerDisplay.tsx
+- src/components/workout/SetRow.tsx
+
+Flujo de Funcionamiento:
+1. Al marcar una serie como completada (checkbox ✓ en SetRow), se llama a `startTimer`.
+2. El hook calcula el fin exacto (`endTimestamp = Date.now() + segundos * 1000`) y
+   persiste el estado en AsyncStorage.
+3. Se delega inmediatamente la alarma al sistema operativo mediante:
+   `programarAlarmaDescanso(segundos)`
+   - En Android utiliza `AlarmManager.setAlarmClock()`, la alarma de mas alta prioridad
+     del sistema que despierta el dispositivo aun en reposo profundo (Doze) o en
+     capas agresivas de gestion de bateria (HyperOS / MIUI).
+   - Canal de notificaciones: 'descanso-series' configurado con `AndroidImportance.MAX`,
+     sonido habilitado, vibracion `[0, 500, 250, 500]` y visibilidad en pantalla bloqueada.
+4. Si el usuario cancela o desmarca la serie antes de tiempo, se llama a
+   `cancelarAlarmaDescanso()`, anulando la alarma del kernel al instante.
+5. Si el temporizador culmina con la app abierta en pantalla, se dispara el sonido
+   local mediante un reproductor PCM compartido (`assets/bell.wav`) y vibracion haptica.
+6. Selector visual inter-series (TimerDisplay):
+   - Ubicado exactamente debajo de cada serie individual.
+   - Despliega botones preconfigurados de descanso: 1:00, 2:00, 2:30, 3:00, 3:30,
+     4:00, 4:30 y 5:00. Permite cambiar el tiempo en caliente.
+
+================================================================================
+8. COMPILACION NATIVA Y CONFIGURACION ANDROID/EAS (app.json & package.json)
+================================================================================
+Archivo: app.json
+- Permisos nativos declarados para Android 12+ (API 31+):
+  * `SCHEDULE_EXACT_ALARM`: Permite programar alarmas exactas inter-series.
+  * `USE_EXACT_ALARM`: Permite la ejecucion puntual sin suspension del kernel.
+  * `POST_NOTIFICATIONS`: Solicitud formal de permisos de notificacion (Android 13+).
+  * `VIBRATE`: Retroalimentacion tactil fisica.
+  * `WAKE_LOCK`: Activacion del procesador al finalizar el descanso.
+- Plugins nativos registrados:
+  * `expo-sqlite`, `expo-router`, `expo-audio`, `expo-notifications`, `expo-asset`.
+
+Resolucion de Dependencias Peer:
+- Se agrego `expo-asset` (requerido por `expo-audio` fuera de Expo Go para empaquetar
+  audios locales en la APK compilada).
+- Se purgo `expo-av` (libreria obsoleta en Expo SDK 58), garantizando 20/20 checks
+  aprobados en `expo-doctor` para builds limpias en EAS Build.
+
+================================================================================
+9. INVENTARIO COMPLETO DE ARCHIVOS DEL PROYECTO
+================================================================================
+- app/
+  ├── _layout.tsx                     -> Layout general, DB init, canal de alarmas
+  ├── (tabs)/
+  │   ├── _layout.tsx                 -> Pestañas inferiores (Entrenar, Historial, Planificacion)
+  │   ├── index.tsx                   -> Vista viva de entrenamiento, series y cardio
+  │   ├── history.tsx                 -> Historial de sesiones y volumen
+  │   └── planificacion.tsx           -> Planificador de mesociclo (1-10 sem, notas ordinales)
+- assets/
+  ├── bell.wav                        -> Audio PCM de campana de gimnasio (reproduccion local)
+  ├── icon.png, splash-icon.png, etc. -> Recursos graficos de la aplicacion
+- src/
+  ├── components/
+  │   └── workout/
+  │       ├── BlockIndicator.tsx      -> Badge de tipo de semana y sesion ordinal
+  │       ├── CardioCard.tsx          -> Tarjeta para bloques de cardio
+  │       ├── ExerciseBottomSheet.tsx -> Selector modal de grupos musculares y ejercicios
+  │       ├── ExerciseCard.tsx        -> Bloque contenedor de un ejercicio y sus series
+  │       ├── NewBlockModal.tsx       -> Modal de seleccion de bloque o sugerencia de descarga
+  │       ├── SetRow.tsx              -> Fila de serie con selector Normal/Warmup/Drop
+  │       ├── TimerDisplay.tsx        -> Temporizador inter-series desplegable (1:00 a 5:00)
+  │       ├── WorkoutHistoryCard.tsx  -> Tarjeta de resumen de sesion pasada en Historial
+  │       └── WorkoutSummaryModal.tsx -> Modal de finalizacion y celebracion de PRs
+  ├── db/
+  │   └── repositories/
+  │       ├── MesocycleRepository.ts  -> Consultas y transacciones de semanas y notas tacticas
+  │       └── WorkoutRepository.ts    -> Persistencia SQLite de workouts, logs y PRs
+  ├── hooks/
+  │   ├── useWorkoutHistory.ts        -> Hook de carga reactiva del historial
+  │   └── useWorkoutTimer.ts          -> Hook del temporizador inter-series con timestamps
+  ├── store/
+  │   ├── useSessionStore.ts          -> Cronometro general, bloques y puente con mesociclo
+  │   └── useWorkoutStore.ts          -> Borrador de rutina activa (ejercicios y series)
+  ├── utils/
+  │   ├── prEngine.ts                 -> Reglas algoritmicas de PR Absoluto
+  │   └── restNotifications.ts        -> Disparo nativo de alarmas con AlarmManager
+  └── theme.ts                        -> Paleta de colores, espaciados y estilos globales
+- database.ts                         -> Esquema DDL SQLite, migraciones v1-v7 y catalogo
+- types.ts / types/                   -> Definicion de tipos TypeScript (workout, mesocycle)
+- app.json                            -> Configuracion de Expo, permisos nativos y plugins
+- package.json                        -> Dependencias SDK 58 y scripts de verificacion
+
+================================================================================
+10. ESTADO ACTUAL DE CALIDAD Y CODIGO
+================================================================================
+- TypeScript: `npx tsc --noEmit` -> 0 errores.
+- Expo Linter: `npx expo lint` -> 0 advertencias, 0 errores.
+- Expo Doctor: `npx expo-doctor` -> 20/20 comprobaciones aprobadas.
+- Integracion Continua / Git: Rama `main` sincronizada con GitHub.
+================================================================================
