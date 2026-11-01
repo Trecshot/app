@@ -182,7 +182,7 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
             {/* Cabecera Verde Oscuro */}
             <View style={styles.header}>
               <View style={styles.trophyContainer}>
-                <Trophy color="white" size={44} strokeWidth={2} />
+                <Trophy color={COLORS.primary} size={44} strokeWidth={2} />
               </View>
               <Text style={styles.headerKicker}>RESUMEN DE SESIÓN</Text>
               <Text style={styles.headerTitle}>¡Entrenamiento completado!</Text>
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     width: 68,
     height: 68,
     borderRadius: 34,
-    backgroundColor: 'rgba(193, 225, 79, 0.25)',
+    backgroundColor: 'rgba(163, 230, 53, 0.18)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.sm,
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerTitle: {
-    color: COLORS.textInverted,
+    color: COLORS.textPrimary,
     fontSize: 24,
     fontWeight: '800',
     textAlign: 'center',

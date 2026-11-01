@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import {
   Clock,
   Dumbbell,
@@ -10,6 +10,7 @@ import {
   FileText,
 } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../theme';
+import { ConfirmModal } from '../ui/ConfirmModal';
 import type { CardioBlock, Ejercicio } from '../../../types';
 
 export interface WorkoutHistoryCardProps {
@@ -52,6 +53,7 @@ export const WorkoutHistoryCard = ({
   onDelete,
 }: WorkoutHistoryCardProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
 
   const sessionEjercicios = session?.ejercicios;
   const sessionExercises = session?.exercises;
@@ -134,15 +136,7 @@ export const WorkoutHistoryCard = ({
 
   const handleOpenMenu = () => {
     if (!onDelete) return;
-    Alert.alert(
-      'Eliminar entrenamiento',
-      `¿Seguro que quieres eliminar la sesión del ${displayDate}? Se borrarán también sus ejercicios, series y cardio. Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Eliminar', style: 'destructive', onPress: () => void onDelete() },
-      ],
-      { cancelable: true },
-    );
+    setIsDeleteModalVisible(true);
   };
 
   return (
@@ -330,11 +324,26 @@ export const WorkoutHistoryCard = ({
         <View style={styles.historyCardioSection}>
           {cardioList.map((c, i) => (
             <Text key={c.id || i} style={styles.historyCardioText}>
-              🏃 {c.type}: {c.minutos} min {c.kilometros ? `(${c.kilometros} km)` : ''}
+              {c.type}: {c.minutos} min {c.kilometros ? `(${c.kilometros} km)` : ''}
             </Text>
           ))}
         </View>
       )}
+
+      {/* Modal Oscuro de Confirmación para Eliminar Sesión */}
+      <ConfirmModal
+        visible={isDeleteModalVisible}
+        title="Eliminar entrenamiento"
+        message={`¿Eliminar la sesión del ${displayDate} y sus registros? Esta acción es irreversible.`}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        confirmDestructive
+        onConfirm={() => {
+          setIsDeleteModalVisible(false);
+          void onDelete?.();
+        }}
+        onCancel={() => setIsDeleteModalVisible(false)}
+      />
     </View>
   );
 };

@@ -6,13 +6,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect } from 'expo-router';
 import { Settings, Maximize, RotateCcw, Info } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
+import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import { SessionStopwatchDisplay } from '../../src/components/workout/TimerDisplay';
 import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
 import { CardioCard } from '../../src/components/workout/CardioCard';
@@ -78,6 +78,15 @@ export default function ActiveWorkoutScreen() {
     notes?: string;
     prs?: number;
   } | null>(null);
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    confirmDestructive?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
 
   const timerStatus = isRunning
     ? '• ENTRENAMIENTO EN CURSO'
@@ -92,22 +101,31 @@ export default function ActiveWorkoutScreen() {
     : '▶ Comenzar';
 
   const handleResetTimer = () => {
-    Alert.alert(
-      'Reiniciar cronómetro',
-      '¿Deseas reiniciar el tiempo del entrenamiento a cero?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Reiniciar', style: 'destructive', onPress: endSession },
-      ],
-    );
+    setConfirmModalConfig({
+      visible: true,
+      title: 'Reiniciar cronómetro',
+      message: '¿Deseas reiniciar el tiempo del entrenamiento a cero?',
+      confirmText: 'Reiniciar',
+      cancelText: 'Cancelar',
+      confirmDestructive: true,
+      onConfirm: () => {
+        setConfirmModalConfig(null);
+        endSession();
+      },
+    });
   };
 
   const handleFinishWorkout = () => {
     if (exercises.length === 0) {
-      Alert.alert(
-        'Rutina vacía',
-        'Añade al menos un ejercicio antes de finalizar el entrenamiento.',
-      );
+      setConfirmModalConfig({
+        visible: true,
+        title: 'Rutina vacía',
+        message: 'Añade al menos un ejercicio antes de finalizar el entrenamiento.',
+        confirmText: 'Entendido',
+        cancelText: '',
+        confirmDestructive: false,
+        onConfirm: () => setConfirmModalConfig(null),
+      });
       return;
     }
 
@@ -118,10 +136,15 @@ export default function ActiveWorkoutScreen() {
     );
 
     if (!hasValidExercise) {
-      Alert.alert(
-        'Sin ejercicios seleccionados',
-        'Selecciona al menos un ejercicio del catálogo para poder finalizar.',
-      );
+      setConfirmModalConfig({
+        visible: true,
+        title: 'Sin ejercicios seleccionados',
+        message: 'Selecciona al menos un ejercicio del catálogo para poder finalizar.',
+        confirmText: 'Entendido',
+        cancelText: '',
+        confirmDestructive: false,
+        onConfirm: () => setConfirmModalConfig(null),
+      });
       return;
     }
 
@@ -149,10 +172,15 @@ export default function ActiveWorkoutScreen() {
       );
 
     if (normalizedExercises.length === 0) {
-      Alert.alert(
-        'Sin series válidas',
-        'Debes registrar al menos una serie con repeticiones mayores a 0 para finalizar el entrenamiento.',
-      );
+      setConfirmModalConfig({
+        visible: true,
+        title: 'Sin series válidas',
+        message: 'Debes registrar al menos una serie con repeticiones mayores a 0 para finalizar el entrenamiento.',
+        confirmText: 'Entendido',
+        cancelText: '',
+        confirmDestructive: false,
+        onConfirm: () => setConfirmModalConfig(null),
+      });
       return;
     }
 
@@ -263,10 +291,15 @@ export default function ActiveWorkoutScreen() {
       await useSessionStore.getState().loadPlanningContext();
     } catch (error) {
       console.error('Error al guardar sesión:', error);
-      Alert.alert(
-        'Error al guardar',
-        'Ocurrió un problema al persistir el entrenamiento en la base de datos local.',
-      );
+      setConfirmModalConfig({
+        visible: true,
+        title: 'Error al guardar',
+        message: 'Ocurrió un problema al persistir el entrenamiento en la base de datos local.',
+        confirmText: 'Entendido',
+        cancelText: '',
+        confirmDestructive: false,
+        onConfirm: () => setConfirmModalConfig(null),
+      });
     } finally {
       setIsSaving(false);
     }
@@ -562,6 +595,20 @@ export default function ActiveWorkoutScreen() {
           router.navigate('/history');
         }}
       />
+
+      {/* Modal Oscuro de Confirmación / Alertas para la pantalla de Entrenamiento */}
+      {confirmModalConfig && (
+        <ConfirmModal
+          visible={confirmModalConfig.visible}
+          title={confirmModalConfig.title}
+          message={confirmModalConfig.message}
+          confirmText={confirmModalConfig.confirmText}
+          cancelText={confirmModalConfig.cancelText}
+          confirmDestructive={confirmModalConfig.confirmDestructive}
+          onConfirm={confirmModalConfig.onConfirm}
+          onCancel={() => setConfirmModalConfig(null)}
+        />
+      )}
     </View>
   );
 }

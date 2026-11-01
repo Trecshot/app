@@ -236,8 +236,20 @@ Toques de Color (Feedback Visual):
 Jerarquía Tipográfica y Pantalla:
 - Cronómetro general: Tipografía ultra destacada (50pt bold/tabular-nums en blanco #FFFFFF).
 - Etiquetas de columnas (SERIE/TIPO, REPS, PESO): Tamaño compacto (11pt) en gris medio (#A3A3A3).
+- Resumen de Sesión (WorkoutSummaryModal): Título "¡Entrenamiento completado!" con contraste
+  estricto en blanco puro #FFFFFF sobre la superficie oscura #121212.
 - Barra de estado (StatusBar): Modo `light` desde la raíz para iconos blancos sobre el fondo #000000.
 - Barra de navegación inferior (Tabs): Fondo negro #000000, borde #262626, icono activo en verde lima #A3E635.
+
+Modales Customizados AMOLED y Microcopy UX:
+- Se reemplazaron todas las alertas nativas (blancas del SO) por un componente `ConfirmModal`
+  personalizado en React Native (fondo #121212, bordes redondeados, borde #262626, botones oscuros/rojos).
+- Microcopy pulido y minimalista:
+  * Historial: "¿Eliminar la sesión del {fecha} y sus registros? Esta acción es irreversible."
+  * Planificación: "¿Eliminar esta semana del mesociclo? Las semanas posteriores se reordenarán."
+  * Selector de Bloques: Eliminados todos los emojis. Títulos concisos "Semana de Carga" (Progresión
+    de peso y volumen) y "Semana de Descarga" (Reducción de intensidad).
+  * Selector de tipo en Planificación: Botones minimalistas "CARGA" y "DESCARGA" sin emojis.
 
 ================================================================================
 9. COMPILACION NATIVA Y CONFIGURACION ANDROID/EAS (app.json & package.json)
@@ -287,6 +299,8 @@ Resolucion de Dependencias Peer y Actualizaciones:
   ├── icon.png, splash-icon.png, etc. -> Recursos graficos de la aplicacion
 - src/
   ├── components/
+  │   ├── ui/
+  │   │   └── ConfirmModal.tsx        -> Modal customizado oscuro de confirmación/alertas (reemplazo de Alert.alert)
   │   └── workout/
   │       ├── BlockIndicator.tsx      -> Badge de tipo de semana y sesion ordinal
   │       ├── CardioCard.tsx          -> Tarjeta para bloques de cardio

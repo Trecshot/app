@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
@@ -22,6 +21,7 @@ import {
   Layers,
 } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
+import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import { MesocycleRepository } from '../../src/db/repositories/MesocycleRepository';
 import {
   plannedTypeToBlockType,
@@ -37,6 +37,15 @@ export default function PlanificacionScreen() {
   const [notesByWeek, setNotesByWeek] = useState<Record<number, Record<number, string>>>({});
   const [expandedWeekIds, setExpandedWeekIds] = useState<Record<number, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [confirmModalConfig, setConfirmModalConfig] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    confirmDestructive?: boolean;
+    onConfirm: () => void;
+  } | null>(null);
 
   const currentSessionIndex = useSessionStore((s) => s.currentSessionIndex);
   const currentBlock = useSessionStore((s) => s.currentBlock);
@@ -77,10 +86,15 @@ export default function PlanificacionScreen() {
 
   const handleAddWeek = async (defaultType: PlannedWeekType = 'CARGA') => {
     if (weeks.length >= 10) {
-      Alert.alert(
-        'Límite alcanzado',
-        'El mesociclo permite configurar un horizonte máximo de 10 semanas.',
-      );
+      setConfirmModalConfig({
+        visible: true,
+        title: 'Límite alcanzado',
+        message: 'El mesociclo permite configurar un horizonte máximo de 10 semanas.',
+        confirmText: 'Entendido',
+        cancelText: '',
+        confirmDestructive: false,
+        onConfirm: () => setConfirmModalConfig(null),
+      });
       return;
     }
 
@@ -207,42 +221,38 @@ export default function PlanificacionScreen() {
   };
 
   const handleDeleteWeek = (week: MesocycleWeek) => {
-    Alert.alert(
-      `Eliminar Semana ${week.week_number}`,
-      '¿Deseas quitar esta semana y sus notas tácticas del mesociclo? Las demás semanas se reordenarán automáticamente.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            await MesocycleRepository.deleteWeek(week.id);
-            await loadMesocycleData();
-            await syncWithSessionStore();
-          },
-        },
-      ],
-    );
+    setConfirmModalConfig({
+      visible: true,
+      title: `Eliminar Semana ${week.week_number}`,
+      message: '¿Eliminar esta semana del mesociclo? Las semanas posteriores se reordenarán.',
+      confirmText: 'Eliminar',
+      cancelText: 'Cancelar',
+      confirmDestructive: true,
+      onConfirm: async () => {
+        setConfirmModalConfig(null);
+        await MesocycleRepository.deleteWeek(week.id);
+        await loadMesocycleData();
+        await syncWithSessionStore();
+      },
+    });
   };
 
   const handleClearMesocycle = () => {
-    Alert.alert(
-      'Desactivar Planificación',
-      '¿Deseas borrar las semanas planificadas y volver al modo 100% manual libre? Tu historial de entrenamientos pasados se conservará intacto.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Volver a modo libre',
-          style: 'destructive',
-          onPress: async () => {
-            await MesocycleRepository.clearMesocycle();
-            setWeeks([]);
-            setNotesByWeek({});
-            await syncWithSessionStore();
-          },
-        },
-      ],
-    );
+    setConfirmModalConfig({
+      visible: true,
+      title: 'Desactivar planificación',
+      message: '¿Volver al modo manual libre? El historial de sesiones pasadas se conservará intacto.',
+      confirmText: 'Volver a modo libre',
+      cancelText: 'Cancelar',
+      confirmDestructive: true,
+      onConfirm: async () => {
+        setConfirmModalConfig(null);
+        await MesocycleRepository.clearMesocycle();
+        setWeeks([]);
+        setNotesByWeek({});
+        await syncWithSessionStore();
+      },
+    });
   };
 
   return (
@@ -427,7 +437,7 @@ export default function PlanificacionScreen() {
                           isCarga && styles.typeOptionTextCargaActive,
                         ]}
                       >
-                        💪 CARGA
+                        CARGA
                       </Text>
                     </TouchableOpacity>
 
@@ -445,7 +455,7 @@ export default function PlanificacionScreen() {
                           !isCarga && styles.typeOptionTextDescargaActive,
                         ]}
                       >
-                        🧘 DESCARGA
+                        DESCARGA
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -628,6 +638,20 @@ export default function PlanificacionScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Modal Oscuro de Confirmación para Acciones de Planificación */}
+      {confirmModalConfig && (
+        <ConfirmModal
+          visible={confirmModalConfig.visible}
+          title={confirmModalConfig.title}
+          message={confirmModalConfig.message}
+          confirmText={confirmModalConfig.confirmText}
+          cancelText={confirmModalConfig.cancelText}
+          confirmDestructive={confirmModalConfig.confirmDestructive}
+          onConfirm={confirmModalConfig.onConfirm}
+          onCancel={() => setConfirmModalConfig(null)}
+        />
+      )}
     </View>
   );
 }

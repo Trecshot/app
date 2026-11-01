@@ -87,7 +87,7 @@ export function NewBlockModal() {
     subtitle = `Tu bloque anterior de ${lastBlock.type} (${formatBlockStartDate(lastBlock.startDate)}) finalizó. ${subtitle}`;
   }
 
-  const renderOption = (type: WeekType, title: string, hint: string, badgeText?: string) => {
+  const renderOption = (type: WeekType, title: string, hint?: string, badgeText?: string) => {
     const isCarga = type === 'carga';
     const isSelected = selectedType === type;
     const textColor = isCarga ? COLORS.textInverted : COLORS.textPrimary;
@@ -115,7 +115,9 @@ export function NewBlockModal() {
                   </View>
                 ) : null}
               </View>
-              <Text style={[styles.optionHint, isCarga && { color: COLORS.textInverted }]}>{hint}</Text>
+              {hint ? (
+                <Text style={[styles.optionHint, isCarga && { color: COLORS.textInverted }]}>{hint}</Text>
+              ) : null}
             </View>
             {isSelected ? <Check size={22} color={textColor} strokeWidth={3} /> : null}
           </View>
@@ -142,20 +144,20 @@ export function NewBlockModal() {
             <>
               {renderOption(
                 'descarga',
-                '🧘 Pasar a Semana de Descarga',
-                'Reducir intensidad y optimizar supercompensación (7 sesiones)',
+                'Pasar a Semana de Descarga',
+                'Reducción de intensidad',
                 'SUGERIDO',
               )}
               {renderOption(
                 'carga',
-                '💪 Encadenar otra Sobrecarga',
-                'Continuar progresando en peso y volumen sin restricciones',
+                'Encadenar otra Sobrecarga',
+                'Progresión de peso y volumen',
               )}
             </>
           ) : (
             <>
-              {renderOption('carga', '💪 Semana de Carga', 'Progresar en peso y volumen (7 sesiones)')}
-              {renderOption('descarga', '🧘 Semana de Descarga', 'Reducir intensidad y recuperar (7 sesiones)')}
+              {renderOption('carga', 'Semana de Carga', 'Progresión de peso y volumen')}
+              {renderOption('descarga', 'Semana de Descarga', 'Reducción de intensidad')}
             </>
           )}
 
