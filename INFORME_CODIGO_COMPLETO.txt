@@ -243,6 +243,19 @@ Jerarquía Tipográfica y Pantalla:
 9. COMPILACION NATIVA Y CONFIGURACION ANDROID/EAS (app.json & package.json)
 ================================================================================
 Archivo: app.json
+- Iconografía Oficial y Splash Screen AMOLED:
+  * `icon`: "./assets/icon.png" (Mancuerna neón verde sobre fondo negro puro #000000, 1024x1024).
+  * `adaptiveIcon` (Android):
+    - `backgroundColor`: "#000000"
+    - `foregroundImage`: "./assets/android-icon-foreground.png" (512x512 con margen de seguridad del 74% para evitar recortes en launchers con máscaras circulares/squircle).
+    - `backgroundImage`: "./assets/android-icon-background.png" (512x512 #000000).
+    - `monochromeImage`: "./assets/android-icon-monochrome.png" (Silueta blanca para Material You en Android 13+).
+  * `expo-splash-screen` (Config Plugin):
+    - `backgroundColor`: "#000000" (Fondo negro sólido para eliminar la cuadrícula gris por defecto).
+    - `image`: "./assets/splash-icon.png" (Mancuerna verde centrada).
+    - `resizeMode`: "contain" (Mantiene la geometría central en cualquier proporción de pantalla).
+    - `imageWidth`: 200.
+    - `dark`: Variante oscura con fondo "#000000".
 - Permisos nativos declarados para Android 12+ (API 31+):
   * `SCHEDULE_EXACT_ALARM`: Permite programar alarmas exactas inter-series.
   * `USE_EXACT_ALARM`: Permite la ejecucion puntual sin suspension del kernel.
@@ -250,12 +263,13 @@ Archivo: app.json
   * `VIBRATE`: Retroalimentacion tactil fisica.
   * `WAKE_LOCK`: Activacion del procesador al finalizar el descanso.
 - Plugins nativos registrados:
-  * `expo-sqlite`, `expo-router`, `expo-audio`, `expo-notifications`, `expo-asset`.
+  * `expo-sqlite`, `expo-router`, `expo-status-bar`, `expo-splash-screen`, `expo-font`, `expo-audio`, `expo-notifications`, `expo-asset`.
 
-Resolucion de Dependencias Peer:
+Resolucion de Dependencias Peer y Actualizaciones:
 - Se agrego `expo-asset` (requerido por `expo-audio` fuera de Expo Go para empaquetar
   audios locales en la APK compilada).
-- Se purgo `expo-av` (libreria obsoleta en Expo SDK 58), garantizando 20/20 checks
+- Se purgo `expo-av` (libreria obsoleta en Expo SDK 58).
+- Se ejecutó `npx expo install --fix`, garantizando 20/20 checks
   aprobados en `expo-doctor` para builds limpias en EAS Build.
 
 ================================================================================
