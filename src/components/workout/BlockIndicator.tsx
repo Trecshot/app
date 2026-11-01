@@ -45,11 +45,11 @@ export function BlockIndicator() {
         accessibilityRole="button"
         accessibilityLabel="Cambiar tipo de semana"
       >
-        <View style={[styles.dot, { backgroundColor: isCarga ? COLORS.timerSurface : COLORS.primaryDark }]} />
-        <Text style={styles.text}>
+        <View style={[styles.dot, { backgroundColor: isCarga ? COLORS.textInverted : COLORS.warmupAccent }]} />
+        <Text style={[styles.text, isCarga && styles.textCarga]}>
           {weekPrefix} - Sesión {sessionNum}/{targetSessions}
         </Text>
-        <ChevronDown size={14} color={COLORS.textPrimary} strokeWidth={2.5} />
+        <ChevronDown size={14} color={isCarga ? COLORS.textInverted : COLORS.textPrimary} strokeWidth={2.5} />
       </TouchableOpacity>
       {startedLabel ? <Text style={styles.startedDateText}>{startedLabel}</Text> : null}
     </View>
@@ -74,7 +74,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   badgeDescarga: {
-    backgroundColor: 'rgba(143, 155, 122, 0.2)',
+    backgroundColor: COLORS.btnSecondary,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   badgeEmpty: {
     backgroundColor: COLORS.surfaceHighlight,
@@ -91,6 +93,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
+  },
+  textCarga: {
+    color: COLORS.textInverted,
+    fontWeight: '800',
   },
   startedDateText: {
     color: COLORS.textSecondary,

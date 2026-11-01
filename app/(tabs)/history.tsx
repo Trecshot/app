@@ -110,7 +110,7 @@ export default function HistoryScreen() {
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
       <View style={styles.iconCircle}>
-        <Dumbbell size={40} color={COLORS.primaryDark} strokeWidth={1.5} />
+        <Dumbbell size={40} color={COLORS.primary} strokeWidth={1.5} />
       </View>
       <Text style={styles.emptyTitle}>Aún no hay registros</Text>
       <Text style={styles.emptySubtitle}>
@@ -129,7 +129,7 @@ export default function HistoryScreen() {
         onPress={() => toggleSection(section.key)}
         activeOpacity={0.8}
       >
-        <View style={[styles.sectionAccent, { backgroundColor: isCarga ? COLORS.primary : COLORS.primaryDark }]} />
+        <View style={[styles.sectionAccent, { backgroundColor: isCarga ? COLORS.primary : COLORS.warmupAccent }]} />
         <Text style={styles.sectionTitle} numberOfLines={1}>{section.title}</Text>
         <Text style={styles.sectionCount}>
           {section.sessionCount} {section.sessionCount === 1 ? 'sesión' : 'sesiones'}
@@ -155,7 +155,7 @@ export default function HistoryScreen() {
       {/* Lista agrupada por bloques de 7 días */}
       <View style={styles.listContainer}>
         {loading && sections.length === 0 ? (
-          <ActivityIndicator style={{ marginTop: 60 }} color={COLORS.primaryDark} />
+          <ActivityIndicator style={{ marginTop: 60 }} color={COLORS.primary} />
         ) : (
           <SectionList<SesionEntrenamiento, WorkoutBlockSection>
             sections={sections.map((sec) => ({

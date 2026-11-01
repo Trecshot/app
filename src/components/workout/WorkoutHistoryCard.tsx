@@ -383,15 +383,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   focusBadge: {
-    backgroundColor: 'rgba(143, 155, 122, 0.18)',
+    backgroundColor: 'rgba(163, 230, 53, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
   },
   focusText: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   expandHintText: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -533,16 +533,16 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   bulletPoint: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontWeight: 'bold',
   },
   notesBox: {
     marginTop: 4,
     padding: SPACING.sm,
-    backgroundColor: 'rgba(143, 155, 122, 0.1)',
+    backgroundColor: 'rgba(163, 230, 53, 0.08)',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(143, 155, 122, 0.25)',
+    borderColor: 'rgba(163, 230, 53, 0.25)',
   },
   notesHeader: {
     flexDirection: 'row',
@@ -551,7 +551,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   notesLabel: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.5,

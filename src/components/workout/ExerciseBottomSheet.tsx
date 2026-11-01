@@ -121,7 +121,7 @@ export function ExerciseBottomSheet<T extends BottomSheetItem>({
 
                     {isSelected && (
                       <View style={styles.checkIcon}>
-                        <Check size={18} color={COLORS.primaryDark} strokeWidth={2.5} />
+                        <Check size={18} color={COLORS.primary} strokeWidth={2.5} />
                       </View>
                     )}
                   </Pressable>
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   itemRowSelected: {
-    backgroundColor: 'rgba(193, 225, 79, 0.18)',
+    backgroundColor: 'rgba(163, 230, 53, 0.18)',
   },
   itemRowPressed: {
     backgroundColor: COLORS.surfaceHighlight,

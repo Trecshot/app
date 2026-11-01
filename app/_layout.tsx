@@ -57,9 +57,14 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-        <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
+      <View style={{ flex: 1, backgroundColor: '#000000' }} onLayout={onLayoutRootView}>
+        <StatusBar style="light" />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: '#000000' },
+          }}
+        >
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
         <NewBlockModal />

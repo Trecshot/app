@@ -360,8 +360,8 @@ const styles = StyleSheet.create({
   },
   focusTag: {
     borderWidth: 1,
-    borderColor: 'rgba(193, 225, 79, 0.5)',
-    backgroundColor: 'rgba(193, 225, 79, 0.12)',
+    borderColor: 'rgba(163, 230, 53, 0.4)',
+    backgroundColor: 'rgba(163, 230, 53, 0.14)',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 14,
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(193, 225, 79, 0.4)',
+    borderColor: COLORS.border,
     gap: 8,
   },
   cardioHeaderRow: {
@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   cardioTotalBadge: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontSize: 12,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   cardioDetails: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontSize: 13,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
   },
   primaryButtonText: {
-    color: COLORS.timerSurface,
+    color: COLORS.textInverted,
     fontSize: 16,
     fontWeight: '800',
   },

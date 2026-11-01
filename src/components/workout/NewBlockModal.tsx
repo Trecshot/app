@@ -90,7 +90,7 @@ export function NewBlockModal() {
   const renderOption = (type: WeekType, title: string, hint: string, badgeText?: string) => {
     const isCarga = type === 'carga';
     const isSelected = selectedType === type;
-    const textColor = isCarga ? COLORS.timerSurface : COLORS.textPrimary;
+    const textColor = isCarga ? COLORS.textInverted : COLORS.textPrimary;
     return (
       <TouchableOpacity
         style={[
@@ -115,7 +115,7 @@ export function NewBlockModal() {
                   </View>
                 ) : null}
               </View>
-              <Text style={[styles.optionHint, isCarga && { color: COLORS.timerSurface }]}>{hint}</Text>
+              <Text style={[styles.optionHint, isCarga && { color: COLORS.textInverted }]}>{hint}</Text>
             </View>
             {isSelected ? <Check size={22} color={textColor} strokeWidth={3} /> : null}
           </View>
@@ -177,7 +177,7 @@ export function NewBlockModal() {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(17, 24, 39, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     padding: SPACING.lg,
   },
@@ -185,11 +185,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: 20,
     padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   eyebrow: {
-    color: COLORS.textSecondary,
+    color: COLORS.primary,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 1,
     marginBottom: 4,
   },
@@ -219,11 +221,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
   },
   optionDescarga: {
-    backgroundColor: COLORS.surfaceHighlight,
+    backgroundColor: COLORS.btnSecondary,
     borderColor: COLORS.border,
   },
   optionSelected: {
-    borderColor: COLORS.timerSurface,
+    borderColor: COLORS.textPrimary,
   },
   optionRow: {
     flexDirection: 'row',
@@ -247,7 +249,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   recommendedPillText: {
-    color: COLORS.timerSurface,
+    color: COLORS.textInverted,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,

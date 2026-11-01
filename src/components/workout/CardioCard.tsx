@@ -141,11 +141,6 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
   },
   header: {
     flexDirection: 'row',
@@ -184,7 +179,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   typePillActive: {
-    backgroundColor: 'rgba(193, 225, 79, 0.15)',
+    backgroundColor: 'rgba(163, 230, 53, 0.16)',
     borderColor: COLORS.primary,
   },
   typePillText: {
@@ -193,8 +188,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   typePillTextActive: {
-    color: COLORS.textPrimary,
-    fontWeight: '700',
+    color: COLORS.primary,
+    fontWeight: '800',
   },
   inputsRow: {
     flexDirection: 'row',

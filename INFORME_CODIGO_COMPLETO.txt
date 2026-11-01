@@ -196,7 +196,51 @@ Flujo de Funcionamiento:
      4:00, 4:30 y 5:00. Permite cambiar el tiempo en caliente.
 
 ================================================================================
-8. COMPILACION NATIVA Y CONFIGURACION ANDROID/EAS (app.json & package.json)
+8. SISTEMA DE DISEÑO AMOLED DARK (UI/UX Y EFICIENCIA ENERGÉTICA)
+================================================================================
+Archivos clave:
+- src/theme.ts
+- app/_layout.tsx
+- app/(tabs)/_layout.tsx
+- app/(tabs)/index.tsx
+- src/components/workout/SetRow.tsx
+- src/components/workout/ExerciseCard.tsx
+- src/components/workout/TimerDisplay.tsx
+- src/components/workout/BlockIndicator.tsx
+- src/components/workout/CardioCard.tsx
+- src/components/workout/WorkoutHistoryCard.tsx
+- src/components/workout/WorkoutSummaryModal.tsx
+
+Filosofía y Paleta Cromática AMOLED:
+El diseño está 100% optimizado para pantallas OLED/AMOLED, apagando píxeles en áreas negras
+puras para ahorro drástico de batería y contraste infinito:
+
+1. Fondo de la App: #000000 (Negro Puro). Píxeles apagados a nivel hardware.
+2. Tarjetas / Contenedores: #121212 (Gris Oscuro). Delimita visualmente las tarjetas de
+   ejercicios, modales y bloques contra el negro puro sin requerir sombras pesadas.
+3. Botón Principal / Acento Activo: #A3E635 (Verde Lima Vibrante). Acción principal
+   ("Comenzar", confirmación, estado activo). Utiliza texto #000000 para contraste superior (>12:1).
+4. Texto Principal: #FFFFFF (Blanco Puro). Máxima legibilidad en títulos, cronómetros,
+   peso y repeticiones.
+5. Texto Secundario: #A3A3A3 (Gris Medio). Para subtítulos, notas, placeholders y labels secundarias.
+6. Botones Secundarios: #262626 (Gris Oscuro). Para "+ Añadir ejercicio" o "+ Añadir bloque de cardio".
+   Visibles y táctiles sin competir con el botón de acción principal.
+7. Bordes y Separadores: #262626 (Gris Oscuro). Líneas ultrafinas de 1px para separación limpia.
+
+Toques de Color (Feedback Visual):
+- Pausa: #F97316 (Naranja sutil) para el botón de "Pausar" cuando el entrenamiento está en marcha.
+- Calentamiento (WARMUP): #EAB308 (Amarillo mostaza).
+- Fallo / Drop Set (DROP_SET): #EF4444 (Rojo tenue).
+- Serie Normal (NORMAL): #A3E635 (Acento Verde Lima).
+
+Jerarquía Tipográfica y Pantalla:
+- Cronómetro general: Tipografía ultra destacada (50pt bold/tabular-nums en blanco #FFFFFF).
+- Etiquetas de columnas (SERIE/TIPO, REPS, PESO): Tamaño compacto (11pt) en gris medio (#A3A3A3).
+- Barra de estado (StatusBar): Modo `light` desde la raíz para iconos blancos sobre el fondo #000000.
+- Barra de navegación inferior (Tabs): Fondo negro #000000, borde #262626, icono activo en verde lima #A3E635.
+
+================================================================================
+9. COMPILACION NATIVA Y CONFIGURACION ANDROID/EAS (app.json & package.json)
 ================================================================================
 Archivo: app.json
 - Permisos nativos declarados para Android 12+ (API 31+):
@@ -215,7 +259,7 @@ Resolucion de Dependencias Peer:
   aprobados en `expo-doctor` para builds limpias en EAS Build.
 
 ================================================================================
-9. INVENTARIO COMPLETO DE ARCHIVOS DEL PROYECTO
+10. INVENTARIO COMPLETO DE ARCHIVOS DEL PROYECTO
 ================================================================================
 - app/
   ├── _layout.tsx                     -> Layout general, DB init, canal de alarmas
@@ -259,7 +303,7 @@ Resolucion de Dependencias Peer:
 - package.json                        -> Dependencias SDK 58 y scripts de verificacion
 
 ================================================================================
-10. ESTADO ACTUAL DE CALIDAD Y CODIGO
+11. ESTADO ACTUAL DE CALIDAD Y CODIGO
 ================================================================================
 - TypeScript: `npx tsc --noEmit` -> 0 errores.
 - Expo Linter: `npx expo lint` -> 0 advertencias, 0 errores.

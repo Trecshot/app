@@ -115,7 +115,7 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
         >
           <Timer
             size={15}
-            color={isRunningForThisSet ? COLORS.primary : COLORS.primaryDark}
+            color={isRunningForThisSet ? COLORS.primary : COLORS.textSecondary}
           />
 
           {isRunningForThisSet ? (
@@ -256,11 +256,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   timerBarExpanded: {
-    borderColor: COLORS.primaryDark,
-    backgroundColor: 'rgba(143, 155, 122, 0.12)',
+    borderColor: COLORS.primary,
+    backgroundColor: 'rgba(163, 230, 53, 0.08)',
   },
   timerBarActive: {
-    backgroundColor: COLORS.timerSurface,
+    backgroundColor: 'rgba(163, 230, 53, 0.12)',
     borderColor: COLORS.primary,
     paddingVertical: 8,
   },
@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceHighlight,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   selectedTimePillText: {
     fontSize: 12,
     fontWeight: '800',
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontVariant: ['tabular-nums'],
   },
   activeCountdownRow: {
@@ -310,8 +310,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   activeCountdownText: {
-    color: COLORS.textInverted,
-    fontSize: 18,
+    color: COLORS.textPrimary,
+    fontSize: 19,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
@@ -319,12 +319,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    backgroundColor: 'rgba(193, 225, 79, 0.16)',
+    backgroundColor: 'rgba(163, 230, 53, 0.16)',
     paddingHorizontal: 7,
     paddingVertical: 2,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(193, 225, 79, 0.35)',
+    borderColor: 'rgba(163, 230, 53, 0.35)',
   },
   changePresetText: {
     color: COLORS.primary,
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   playManualButton: {
-    backgroundColor: 'rgba(143, 155, 122, 0.18)',
+    backgroundColor: 'rgba(163, 230, 53, 0.18)',
     padding: 5,
     borderRadius: 6,
     marginLeft: 6,
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   optionChipSelected: {
-    backgroundColor: COLORS.timerSurface,
+    backgroundColor: 'rgba(163, 230, 53, 0.18)',
     borderColor: COLORS.primary,
   },
   optionChipText: {
@@ -382,8 +382,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   stopwatchText: {
-    color: COLORS.textInverted,
-    fontSize: 48,
+    color: COLORS.textPrimary,
+    fontSize: 50,
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },

@@ -40,7 +40,7 @@ const SET_TYPE_OPTIONS: {
     pillText: 'Normal',
     label: 'Serie Normal',
     description: 'Serie efectiva de trabajo',
-    accentColor: COLORS.primaryDark,
+    accentColor: COLORS.primary,
   },
   {
     type: 'WARMUP',
@@ -265,7 +265,7 @@ const SetRowComponent = ({
           accessibilityRole="checkbox"
           accessibilityState={{ checked: isCompleted }}
         >
-          <Check size={20} color={isCompleted ? COLORS.surface : COLORS.textSecondary} />
+          <Check size={20} color={isCompleted ? COLORS.textInverted : COLORS.textSecondary} />
         </TouchableOpacity>
 
         {/* Botón de Eliminar */}
@@ -302,7 +302,7 @@ const SetRowComponent = ({
                           borderColor: option.accentColor,
                           backgroundColor:
                             option.type === 'NORMAL'
-                              ? 'rgba(143, 155, 122, 0.12)'
+                              ? 'rgba(163, 230, 53, 0.12)'
                               : getSetTypeColor(option.type),
                         },
                       ]}
@@ -316,11 +316,11 @@ const SetRowComponent = ({
                         ]}
                       >
                         {option.type === 'DROP_SET' ? (
-                          <Flame size={14} color={COLORS.surface} />
+                          <Flame size={14} color="#FFFFFF" />
                         ) : option.type === 'WARMUP' ? (
-                          <Zap size={14} color={COLORS.surface} />
+                          <Zap size={14} color="#000000" />
                         ) : (
-                          <Shield size={14} color={COLORS.surface} />
+                          <Shield size={14} color="#000000" />
                         )}
                       </View>
                       <View style={styles.optionTextContainer}>
@@ -370,10 +370,10 @@ const styles = StyleSheet.create({
     borderLeftColor: COLORS.warmupAccent,
   },
   rowCompleted: {
-    backgroundColor: 'rgba(193, 225, 79, 0.2)',
+    backgroundColor: 'rgba(163, 230, 53, 0.12)',
   },
   rowCompletedTyped: {
-    opacity: 0.92,
+    opacity: 0.95,
   },
   setTypeSelector: {
     flexDirection: 'row',
@@ -389,16 +389,17 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   setTypeSelectorDrop: {
-    backgroundColor: 'rgba(220, 38, 38, 0.16)',
-    borderColor: 'rgba(220, 38, 38, 0.45)',
+    backgroundColor: 'rgba(239, 68, 68, 0.16)',
+    borderColor: 'rgba(239, 68, 68, 0.45)',
   },
   setTypeSelectorWarmup: {
-    backgroundColor: 'rgba(245, 158, 11, 0.18)',
-    borderColor: 'rgba(245, 158, 11, 0.45)',
+    backgroundColor: 'rgba(234, 179, 8, 0.18)',
+    borderColor: 'rgba(234, 179, 8, 0.45)',
   },
   setNumber: {
     fontWeight: '800',
     fontSize: 13,
+    color: COLORS.textPrimary,
     fontVariant: ['tabular-nums'],
   },
   setTypePillText: {
@@ -416,7 +417,8 @@ const styles = StyleSheet.create({
   inputCompleted: {
     backgroundColor: 'transparent',
     borderColor: 'transparent',
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
+    fontWeight: '800',
   },
   actionButton: {
     padding: SPACING.xs,

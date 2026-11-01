@@ -387,7 +387,7 @@ export default function ActiveWorkoutScreen() {
           <TouchableOpacity
             style={[
               styles.startButton,
-              isRunning && { backgroundColor: COLORS.primaryDark },
+              isRunning && { backgroundColor: COLORS.pause },
             ]}
             onPress={toggleSession}
             activeOpacity={0.8}
@@ -395,7 +395,7 @@ export default function ActiveWorkoutScreen() {
             <Text
               style={[
                 styles.startButtonText,
-                isRunning && { color: COLORS.textInverted },
+                isRunning ? { color: '#FFFFFF' } : { color: COLORS.textInverted },
               ]}
             >
               {timerButtonText}
@@ -529,7 +529,7 @@ export default function ActiveWorkoutScreen() {
         <TouchableOpacity
           style={[
             styles.solidButton,
-            { backgroundColor: COLORS.primaryDark, marginTop: SPACING.xl },
+            { backgroundColor: COLORS.primary, marginTop: SPACING.xl },
             isSaving && { opacity: 0.7 },
           ]}
           onPress={handleFinishWorkout}
@@ -604,6 +604,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: SPACING.lg,
     marginBottom: SPACING.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   timerHeaderRow: {
     flexDirection: 'row',
@@ -630,7 +632,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   startButtonText: {
-    color: COLORS.timerSurface,
+    color: COLORS.textInverted,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -674,11 +676,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.btnSecondary,
   },
   outlineButtonText: {
     color: COLORS.textPrimary,
-    fontWeight: '600',
+    fontWeight: '700',
     fontSize: 16,
   },
   solidButton: {
@@ -687,7 +689,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   solidButtonText: {
-    fontWeight: '700',
+    fontWeight: '800',
     fontSize: 16,
   },
   focusContainer: {
@@ -725,7 +727,7 @@ const styles = StyleSheet.create({
   },
   focusChipActive: {
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primaryDark,
+    borderColor: COLORS.primary,
   },
   focusChipText: {
     fontSize: 13,
@@ -733,19 +735,21 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   focusChipTextActive: {
-    color: COLORS.timerSurface,
-    fontWeight: '700',
+    color: COLORS.textInverted,
+    fontWeight: '800',
   },
   deloadBanner: {
-    backgroundColor: 'rgba(193, 225, 79, 0.22)',
+    backgroundColor: 'rgba(163, 230, 53, 0.1)',
     borderWidth: 1,
-    borderColor: COLORS.primaryDark,
+    borderColor: 'rgba(163, 230, 53, 0.3)',
     borderRadius: 16,
     padding: SPACING.md,
     marginBottom: SPACING.lg,
   },
   planningBannerCard: {
-    backgroundColor: COLORS.timerSurface,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     padding: SPACING.md,
     borderRadius: 14,
     marginBottom: SPACING.lg,
@@ -769,7 +773,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   planningObjectiveText: {
-    color: COLORS.textInverted,
+    color: COLORS.textPrimary,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 6,
@@ -813,7 +817,7 @@ const styles = StyleSheet.create({
   },
   deloadPrimaryBtn: {
     flex: 1,
-    backgroundColor: COLORS.timerSurface,
+    backgroundColor: COLORS.primary,
     paddingVertical: 10,
     borderRadius: 10,
     alignItems: 'center',
@@ -825,7 +829,7 @@ const styles = StyleSheet.create({
   },
   deloadSecondaryBtn: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.btnSecondary,
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingVertical: 10,

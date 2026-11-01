@@ -105,11 +105,11 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
           ]}
           onPress={() => setIsGroupSheetOpen(true)}
         >
-          <Tag size={13} color={COLORS.primaryDark} style={{ marginRight: 5 }} />
+          <Tag size={13} color={COLORS.primary} style={{ marginRight: 5 }} />
           <Text style={styles.muscleGroupText}>
             {exercise.selectedMuscleGroup || 'Elegir Grupo'}
           </Text>
-          <ChevronDown size={14} color={COLORS.primaryDark} style={{ marginLeft: 3 }} />
+          <ChevronDown size={14} color={COLORS.primary} style={{ marginLeft: 3 }} />
         </Pressable>
 
         <View style={{ flex: 1 }} />
@@ -135,7 +135,7 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
         >
           <CheckCheck
             size={18}
-            color={allSetsCompleted ? COLORS.timerSurface : COLORS.primaryDark}
+            color={allSetsCompleted ? COLORS.textInverted : COLORS.primary}
           />
         </Pressable>
 
@@ -164,7 +164,7 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
           {hasGroupSelected ? (
             <Dumbbell
               size={18}
-              color={hasExerciseSelected ? COLORS.primaryDark : COLORS.textSecondary}
+              color={hasExerciseSelected ? COLORS.primary : COLORS.textSecondary}
               style={{ marginRight: 8 }}
             />
           ) : (
@@ -222,7 +222,7 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
         onPress={() => addSet(exercise.id)}
         activeOpacity={0.7}
       >
-        <PlusCircle size={15} color={COLORS.primaryDark} />
+        <PlusCircle size={15} color={COLORS.primary} />
         <Text style={styles.addSetText}>Añadir serie</Text>
       </TouchableOpacity>
 
@@ -268,22 +268,22 @@ const styles = StyleSheet.create({
     marginRight: SPACING.sm,
   },
   indexText: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontSize: 14,
     fontWeight: '800',
   },
   muscleGroupButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(143, 155, 122, 0.15)',
+    backgroundColor: 'rgba(163, 230, 53, 0.12)',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(143, 155, 122, 0.3)',
+    borderColor: 'rgba(163, 230, 53, 0.25)',
   },
   muscleGroupText: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   },
   completeAllButton: {
     padding: 6,
-    backgroundColor: 'rgba(143, 155, 122, 0.15)',
+    backgroundColor: 'rgba(163, 230, 53, 0.12)',
     borderRadius: 14,
     marginRight: SPACING.sm,
   },
@@ -317,12 +317,12 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   exercisePickerButtonDisabled: {
-    opacity: 0.55,
-    backgroundColor: '#F3F4F6',
+    opacity: 0.45,
+    backgroundColor: COLORS.surface,
   },
   exercisePickerButtonSelected: {
-    borderColor: COLORS.primaryDark,
-    backgroundColor: COLORS.surface,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.surfaceHighlight,
   },
   exercisePickerLeft: {
     flexDirection: 'row',
@@ -364,15 +364,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     marginTop: SPACING.sm,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: COLORS.surfaceHighlight,
+    backgroundColor: COLORS.btnSecondary,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   addSetText: {
-    color: COLORS.primaryDark,
+    color: COLORS.primary,
     fontWeight: '700',
     marginLeft: 5,
     fontSize: 13,

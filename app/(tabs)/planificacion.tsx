@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   activeBadgePillText: {
-    color: COLORS.timerSurface,
+    color: COLORS.textInverted,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.4,
@@ -871,11 +871,11 @@ const styles = StyleSheet.create({
   },
   typeOptionBtnCargaActive: {
     backgroundColor: COLORS.primary,
-    borderColor: COLORS.primaryDark,
+    borderColor: COLORS.primary,
   },
   typeOptionBtnDescargaActive: {
-    backgroundColor: COLORS.timerSurface,
-    borderColor: COLORS.timerSurface,
+    backgroundColor: COLORS.btnSecondary,
+    borderColor: COLORS.border,
   },
   typeOptionText: {
     fontSize: 13,
@@ -883,10 +883,10 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   typeOptionTextCargaActive: {
-    color: COLORS.timerSurface,
+    color: COLORS.textInverted,
   },
   typeOptionTextDescargaActive: {
-    color: COLORS.textInverted,
+    color: COLORS.textPrimary,
   },
   quotaRow: {
     flexDirection: 'row',
@@ -915,8 +915,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   quotaChipSelected: {
-    backgroundColor: COLORS.timerSurface,
-    borderColor: COLORS.timerSurface,
+    backgroundColor: 'rgba(163, 230, 53, 0.16)',
+    borderColor: COLORS.primary,
   },
   quotaChipText: {
     fontSize: 12,
@@ -1035,7 +1035,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   addWeekCargaBtnText: {
-    color: COLORS.timerSurface,
+    color: COLORS.textInverted,
     fontSize: 14,
     fontWeight: '800',
   },
@@ -1044,7 +1044,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.btnSecondary,
     borderWidth: 1,
     borderColor: COLORS.border,
     paddingHorizontal: 16,
@@ -1052,7 +1052,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   addWeekDescargaBtnText: {
-    color: COLORS.primaryDark,
+    color: COLORS.textPrimary,
     fontSize: 14,
     fontWeight: '800',
   },

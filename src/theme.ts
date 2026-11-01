@@ -1,21 +1,23 @@
 import { StyleSheet } from 'react-native';
 
 export const COLORS = {
-  background: '#F9FAFB', // Fondo gris muy claro de la app
-  surface: '#FFFFFF', // Fondo blanco de las tarjetas
-  surfaceHighlight: '#F3F4F6', // Fondo de inputs
-  timerSurface: '#18271E', // Verde oscuro casi negro para la tarjeta del reloj
-  primary: '#C1E14F', // Verde lima vibrante (Comenzar, Añadir Serie)
-  primaryDark: '#8F9B7A', // Verde salvia/oliva (Finalizar entrenamiento)
-  textPrimary: '#111827', // Negro/Gris oscuro para títulos
-  textSecondary: '#6B7280', // Gris para subtítulos y placeholders
-  textInverted: '#FFFFFF', // Blanco para textos sobre fondos oscuros
-  border: '#E5E7EB', // Líneas divisorias sutiles
-  danger: '#EF4444', // Rojo para acciones destructivas / eliminar
-  dropSetIndicator: 'rgba(220, 38, 38, 0.12)', // Crimson traslúcido para fila Drop Set
-  dropSetAccent: '#DC2626', // Crimson sólido para etiqueta/borde Drop Set
-  warmupIndicator: 'rgba(245, 158, 11, 0.14)', // Amber traslúcido para fila Warmup
-  warmupAccent: '#D97706', // Amber sólido para etiqueta/borde Warmup
+  background: '#000000', // Negro Puro AMOLED (píxeles apagados, ahorro de batería)
+  surface: '#121212', // Gris Oscuro para tarjetas, modales y contenedores
+  surfaceHighlight: '#1C1C1C', // Gris ligeramente más claro para inputs y chips secundarios
+  timerSurface: '#121212', // Fondo oscuro para la tarjeta del cronómetro
+  primary: '#A3E635', // Verde Lima vibrante (Botón Principal / Acento activo)
+  primaryDark: '#84CC16', // Verde lima profundo para detalles secundarios
+  pause: '#F97316', // Naranja sutil para estado de pausa / botón pausar
+  textPrimary: '#FFFFFF', // Blanco puro para títulos, números, series, reps y peso
+  textSecondary: '#A3A3A3', // Gris medio para subtítulos, notas y placeholders
+  textInverted: '#000000', // Negro puro para alto contraste sobre fondo Verde Lima
+  border: '#262626', // Gris oscuro sutil para bordes y separadores limpios
+  btnSecondary: '#262626', // Gris oscuro para botones secundarios (+ Añadir ejercicio/cardio)
+  danger: '#EF4444', // Rojo tenue para fallo, drop set o acciones destructivas
+  dropSetIndicator: 'rgba(239, 68, 68, 0.16)', // Rojo tenue traslúcido para fila Drop Set
+  dropSetAccent: '#EF4444', // Rojo tenue sólido para Drop Set / Fallo
+  warmupIndicator: 'rgba(234, 179, 8, 0.16)', // Amarillo mostaza traslúcido para Warmup
+  warmupAccent: '#EAB308', // Amarillo mostaza sólido para serie Calentamiento
   normalSet: 'transparent', // Base transparente para serie normal
 };
 
@@ -34,14 +36,11 @@ export const GLOBAL_STYLES = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surface,
-    borderRadius: 16, // Bordes más redondeados según tu diseño original
+    borderRadius: 16,
     padding: SPACING.md,
     marginBottom: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2, // Sombra suave en Android
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
   title: {
     color: COLORS.textPrimary,
@@ -60,7 +59,7 @@ export const GLOBAL_STYLES = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   input: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceHighlight,
     borderColor: COLORS.border,
     borderWidth: 1,
     color: COLORS.textPrimary,
