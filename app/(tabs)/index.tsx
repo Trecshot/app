@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { router, useFocusEffect } from 'expo-router';
-import { Settings, Maximize, RotateCcw, Info } from 'lucide-react-native';
+import { Settings, Maximize, RotateCcw } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import { SessionStopwatchDisplay } from '../../src/components/workout/TimerDisplay';
@@ -19,7 +19,6 @@ import { CardioCard } from '../../src/components/workout/CardioCard';
 import { WorkoutSummaryModal } from '../../src/components/workout/WorkoutSummaryModal';
 import { useWorkoutStore } from '../../src/store/useWorkoutStore';
 import {
-  BLOCK_TARGET_SESSIONS,
   useSessionStore,
   isBlockExpired,
 } from '../../src/store/useSessionStore';
@@ -48,7 +47,6 @@ export default function ActiveWorkoutScreen() {
   const getElapsedSeconds = useSessionStore((s) => s.getElapsedSeconds);
   const startTimestamp = useSessionStore((s) => s.startTimestamp);
   const currentBlock = useSessionStore((s) => s.currentBlock);
-  const startNewBlock = useSessionStore((s) => s.startNewBlock);
   const activeWeek = useSessionStore((s) => s.activeWeek);
   const currentSessionIndex = useSessionStore((s) => s.currentSessionIndex);
   const activeSessionNote = useSessionStore((s) => s.activeSessionNote);
@@ -362,41 +360,6 @@ export default function ActiveWorkoutScreen() {
             ) : null}
           </View>
         )}
-
-        {/* Banner informativo no bloqueante al completar 7/7 sesiones de Sobrecarga (modo manual) */}
-        {!activeWeek &&
-          currentBlock &&
-          currentBlock.type === 'carga' &&
-          (currentBlock.sessionCount ?? 0) >=
-            (currentBlock.targetSessions ?? BLOCK_TARGET_SESSIONS) && (
-            <View style={styles.deloadBanner}>
-              <View style={styles.deloadBannerHeader}>
-                <Info size={18} color={COLORS.timerSurface} />
-                <Text style={styles.deloadBannerTitle}>
-                  ¡7/7 sesiones de Sobrecarga completadas!
-                </Text>
-              </View>
-              <Text style={styles.deloadBannerText}>
-                Se recomienda transicionar hacia una semana de Descarga para optimizar tu recuperación, aunque puedes encadenar otra semana de sobrecarga si lo prefieres.
-              </Text>
-              <View style={styles.deloadBannerActions}>
-                <TouchableOpacity
-                  style={styles.deloadPrimaryBtn}
-                  onPress={() => void startNewBlock('descarga')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.deloadPrimaryBtnText}>Pasar a Descarga</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.deloadSecondaryBtn}
-                  onPress={() => void startNewBlock('carga')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.deloadSecondaryBtnText}>Seguir en Carga</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
 
         {/* Tarjeta Oscura del Cronómetro */}
         <View style={styles.timerCard}>
@@ -785,14 +748,6 @@ const styles = StyleSheet.create({
     color: COLORS.textInverted,
     fontWeight: '800',
   },
-  deloadBanner: {
-    backgroundColor: 'rgba(163, 230, 53, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(163, 230, 53, 0.3)',
-    borderRadius: 16,
-    padding: SPACING.md,
-    marginBottom: SPACING.lg,
-  },
   planningBannerCard: {
     backgroundColor: COLORS.surface,
     borderWidth: 1,
@@ -839,54 +794,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 19,
-  },
-  deloadBannerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  deloadBannerTitle: {
-    color: COLORS.textPrimary,
-    fontSize: 15,
-    fontWeight: '800',
-    flex: 1,
-  },
-  deloadBannerText: {
-    color: COLORS.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: SPACING.sm,
-  },
-  deloadBannerActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  deloadPrimaryBtn: {
-    flex: 1,
-    backgroundColor: COLORS.primary,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  deloadPrimaryBtnText: {
-    color: COLORS.textInverted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  deloadSecondaryBtn: {
-    flex: 1,
-    backgroundColor: COLORS.btnSecondary,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  deloadSecondaryBtnText: {
-    color: COLORS.textPrimary,
-    fontSize: 13,
-    fontWeight: '700',
   },
   notesSection: {
     marginTop: SPACING.lg,

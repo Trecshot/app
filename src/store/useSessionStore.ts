@@ -325,14 +325,6 @@ export const useSessionStore = create<SessionState>()(
               targetSessions: target,
             };
 
-            const reachedTarget = sesionesEnBloque >= target;
-            // Solo mostrar sugerencia manual si no hay semana de planificación activa
-            const shouldSuggestDeload =
-              !activeWeek &&
-              reachedTarget &&
-              syncedBlock.type === 'carga' &&
-              get().dismissedBlockSuggestionId !== syncedBlock.id;
-
             const sessionIndex = Math.min(target, sesionesEnBloque + 1);
             const note = activeWeek
               ? await MesocycleRepository.getNoteForSession(activeWeek.id, sessionIndex)
@@ -342,7 +334,7 @@ export const useSessionStore = create<SessionState>()(
               currentBlock: syncedBlock,
               lastBlock: syncedBlock,
               blockStatus: 'active',
-              showDeloadSuggestion: shouldSuggestDeload,
+              showDeloadSuggestion: false,
               activeWeek: activeWeek ?? null,
               currentSessionIndex: sessionIndex,
               activeSessionNote: note,

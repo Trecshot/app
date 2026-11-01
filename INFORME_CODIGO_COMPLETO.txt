@@ -48,6 +48,9 @@ El enrutador base utiliza Expo Router dentro del directorio `app/`:
   * Modulo de Planificacion Condicional: Si existe una semana activa configurada,
     despliega el objetivo semanal y la nota tactica exacta de la sesion en curso
     (ej. Sesion 2/7) antes de iniciar los levantamientos.
+  * Encadenamiento libre de semanas: Sin banners ni sugerencias intrusivas de descarga
+    al cumplir las 7/7 sesiones; el usuario puede continuar encadenando semanas de sobrecarga
+    de manera 100% fluida y sin fricciones.
   * Tarjeta de Cronometro general de la sesion activa (`SessionStopwatchDisplay`).
   * Selector multi-chip de enfoque muscular de la sesion (`SessionFocus`).
   * Listado dinamico de ejercicios con tarjetas independientes (`ExerciseCard`).
@@ -306,7 +309,7 @@ Resolucion de Dependencias Peer y Actualizaciones:
   │       ├── CardioCard.tsx          -> Tarjeta para bloques de cardio
   │       ├── ExerciseBottomSheet.tsx -> Selector modal de grupos musculares y ejercicios
   │       ├── ExerciseCard.tsx        -> Bloque contenedor de un ejercicio y sus series
-  │       ├── NewBlockModal.tsx       -> Modal de seleccion de bloque o sugerencia de descarga
+  │       ├── NewBlockModal.tsx       -> Modal de seleccion de bloque (Carga/Descarga) con libertad absoluta
   │       ├── SetRow.tsx              -> Fila de serie con selector Normal/Warmup/Drop
   │       ├── TimerDisplay.tsx        -> Temporizador inter-series desplegable (1:00 a 5:00)
   │       ├── WorkoutHistoryCard.tsx  -> Tarjeta de resumen de sesion pasada en Historial

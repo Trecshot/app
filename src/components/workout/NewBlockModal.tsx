@@ -13,16 +13,14 @@ import type { WeekType } from '../../../types';
 
 /**
  * Modal global de gestión de bloques de 7 sesiones efectivas (carga/descarga).
- * - Sin bloqueos forzosos: al completar 7/7 sesiones de sobrecarga sugiere pasar a descarga,
- *   pero permite encadenar otra semana de sobrecarga o cerrar el aviso libremente.
+ * - Sin bloqueos forzosos ni sugerencias invasivas: el usuario tiene total libertad
+ *   para encadenar semanas de sobrecarga o pasar a descarga según sus necesidades.
  */
 export function NewBlockModal() {
   const blockStatus = useSessionStore((s) => s.blockStatus);
   const lastBlock = useSessionStore((s) => s.lastBlock);
   const currentBlock = useSessionStore((s) => s.currentBlock);
   const isBlockPickerOpen = useSessionStore((s) => s.isBlockPickerOpen);
-  const showDeloadSuggestion = useSessionStore((s) => s.showDeloadSuggestion);
-  const dismissDeloadSuggestion = useSessionStore((s) => s.dismissDeloadSuggestion);
   const startNewBlock = useSessionStore((s) => s.startNewBlock);
   const changeCurrentBlockType = useSessionStore((s) => s.changeCurrentBlockType);
   const closeBlockPicker = useSessionStore((s) => s.closeBlockPicker);
@@ -30,7 +28,6 @@ export function NewBlockModal() {
 
   const isInitialSetup = blockStatus === 'needs_new';
   const isEditing = !isInitialSetup && isBlockPickerOpen && currentBlock !== null;
-  const isSuggestionMode = !isInitialSetup && !isBlockPickerOpen && showDeloadSuggestion;
   const isCompletedBlock = currentBlock ? isBlockExpired(currentBlock) : false;
   const selectedType = isEditing && !isCompletedBlock ? currentBlock?.type : undefined;
 
@@ -51,10 +48,6 @@ export function NewBlockModal() {
   };
 
   const handleClose = () => {
-    if (isSuggestionMode) {
-      dismissDeloadSuggestion();
-      return;
-    }
     if (isInitialSetup) {
       void handleSelect('carga');
       return;
@@ -67,11 +60,7 @@ export function NewBlockModal() {
   let subtitle =
     'El bloque se contabiliza por 7 sesiones efectivas completadas, sin atarse rígidamente a los días del calendario.';
 
-  if (isSuggestionMode && currentBlock) {
-    eyebrow = 'BLOQUE COMPLETADO · 7/7 SESIONES';
-    modalTitle = '¡7 sesiones de sobrecarga completadas!';
-    subtitle = `Completaste las 7/7 sesiones de tu bloque (${formatBlockStartDate(currentBlock.startDate)}). Te sugerimos iniciar una semana de Descarga para favorecer la recuperación articular y muscular, aunque puedes encadenar otro bloque de Sobrecarga si te sientes con energía.`;
-  } else if (isEditing && currentBlock) {
+  if (isEditing && currentBlock) {
     const target = currentBlock.targetSessions ?? BLOCK_TARGET_SESSIONS;
     const initiatedText = formatBlockStartDate(currentBlock.startDate);
     if (isCompletedBlock) {
@@ -87,7 +76,7 @@ export function NewBlockModal() {
     subtitle = `Tu bloque anterior de ${lastBlock.type} (${formatBlockStartDate(lastBlock.startDate)}) finalizó. ${subtitle}`;
   }
 
-  const renderOption = (type: WeekType, title: string, hint?: string, badgeText?: string) => {
+  const renderOption = (type: WeekType, title: string, hint?: string) => {
     const isCarga = type === 'carga';
     const isSelected = selectedType === type;
     const textColor = isCarga ? COLORS.textInverted : COLORS.textPrimary;
@@ -109,11 +98,6 @@ export function NewBlockModal() {
             <View style={{ flex: 1 }}>
               <View style={styles.optionTitleRow}>
                 <Text style={[styles.optionTitle, { color: textColor }]}>{title}</Text>
-                {badgeText ? (
-                  <View style={styles.recommendedPill}>
-                    <Text style={styles.recommendedPillText}>{badgeText}</Text>
-                  </View>
-                ) : null}
               </View>
               {hint ? (
                 <Text style={[styles.optionHint, isCarga && { color: COLORS.textInverted }]}>{hint}</Text>
@@ -128,7 +112,7 @@ export function NewBlockModal() {
 
   return (
     <Modal
-      visible={isInitialSetup || isBlockPickerOpen || isSuggestionMode}
+      visible={isInitialSetup || isBlockPickerOpen}
       transparent
       animationType="fade"
       statusBarTranslucent
@@ -140,35 +124,15 @@ export function NewBlockModal() {
           <Text style={styles.title}>{modalTitle}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
 
-          {isSuggestionMode ? (
-            <>
-              {renderOption(
-                'descarga',
-                'Pasar a Semana de Descarga',
-                'Reducción de intensidad',
-                'SUGERIDO',
-              )}
-              {renderOption(
-                'carga',
-                'Encadenar otra Sobrecarga',
-                'Progresión de peso y volumen',
-              )}
-            </>
-          ) : (
-            <>
-              {renderOption('carga', 'Semana de Carga', 'Progresión de peso y volumen')}
-              {renderOption('descarga', 'Semana de Descarga', 'Reducción de intensidad')}
-            </>
-          )}
+          {renderOption('carga', 'Semana de Carga', 'Progresión de peso y volumen')}
+          {renderOption('descarga', 'Semana de Descarga', 'Reducción de intensidad')}
 
           <TouchableOpacity
             style={styles.cancelButton}
             onPress={handleClose}
             disabled={saving !== null}
           >
-            <Text style={styles.cancelText}>
-              {isSuggestionMode ? 'Ignorar aviso y continuar libremente' : 'Cerrar'}
-            </Text>
+            <Text style={styles.cancelText}>Cerrar</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -243,18 +207,6 @@ const styles = StyleSheet.create({
   optionTitle: {
     fontSize: 16,
     fontWeight: '800',
-  },
-  recommendedPill: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-  },
-  recommendedPillText: {
-    color: COLORS.textInverted,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
   },
   optionHint: {
     color: COLORS.textSecondary,
