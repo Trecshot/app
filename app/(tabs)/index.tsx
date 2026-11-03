@@ -14,6 +14,7 @@ import { Settings, Maximize, RotateCcw } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import { SessionStopwatchDisplay } from '../../src/components/workout/TimerDisplay';
+import { sanitizeTacticalNote } from '../../src/utils/textSanitizer';
 import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
 import { CardioCard } from '../../src/components/workout/CardioCard';
 import { WorkoutSummaryModal } from '../../src/components/workout/WorkoutSummaryModal';
@@ -354,7 +355,7 @@ export default function ActiveWorkoutScreen() {
               <View style={styles.planningSessionNoteBox}>
                 <Text style={styles.planningSessionNoteText}>
                   Nota Táctica (Sesión {currentSessionIndex}/
-                  {activeWeek.total_planned_sessions}): {activeSessionNote}
+                  {activeWeek.total_planned_sessions}): {sanitizeTacticalNote(activeSessionNote)}
                 </Text>
               </View>
             ) : null}
@@ -512,7 +513,7 @@ export default function ActiveWorkoutScreen() {
           <TextInput
             style={styles.notesInput}
             value={notes}
-            onChangeText={setNotes}
+            onChangeText={(text) => setNotes(sanitizeTacticalNote(text))}
             placeholder="Ej. Sensación de fatiga alta, buen bombeo, falta de sueño..."
             placeholderTextColor={COLORS.textSecondary}
             multiline

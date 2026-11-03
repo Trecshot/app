@@ -1,4 +1,5 @@
 import { Crypto } from '../../utils/uuid';
+import { sanitizeTacticalNote } from '../../utils/textSanitizer';
 import {
   createTrainingBlock,
   findTrainingBlockForDate,
@@ -133,7 +134,7 @@ export class WorkoutRepository {
       const date = sesion.fecha;
       const weekType: WeekType = block?.type ?? sesion.tipoSemana;
       const duration = sesion.duracionSegundos ?? 0;
-      const notes = sesion.notas?.trim() ? sesion.notas.trim() : null;
+      const notes = sesion.notas ? sanitizeTacticalNote(sesion.notas) : null;
       const blockId = block?.id ?? null;
       const cycleWeek = getIsoWeekNumber(date);
       const sessionFocusJson =

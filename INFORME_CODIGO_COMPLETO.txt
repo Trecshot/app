@@ -328,6 +328,7 @@ Resolucion de Dependencias Peer y Actualizaciones:
   ├── utils/
   │   ├── prEngine.ts                 -> Reglas algoritmicas de PR Absoluto (1-3 reps, unicidad, NORMAL)
   │   ├── restNotifications.ts        -> Disparo nativo de alarmas con AlarmManager
+  │   ├── textSanitizer.ts            -> Sanitizador de formulas y comandos LaTeX a texto plano limpio
   │   └── uuid.ts                     -> Generador universal RFC4122 v4 puro (reemplazo seguro de ExpoCrypto)
   └── theme.ts                        -> Paleta de colores, espaciados y estilos globales
 - database.ts                         -> Esquema DDL SQLite, migraciones v1-v8 y catalogo

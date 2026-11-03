@@ -28,6 +28,7 @@ import {
   useSessionStore,
 } from '../../src/store/useSessionStore';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
+import { sanitizeTacticalNote } from '../../src/utils/textSanitizer';
 import type { MesocycleWeek, PlannedWeekType } from '../../types';
 
 const SESSION_QUOTA_OPTIONS = [4, 5, 6, 7];
@@ -195,10 +196,11 @@ export default function PlanificacionScreen() {
   };
 
   const handleChangeWeekComment = (weekId: number, text: string) => {
+    const clean = sanitizeTacticalNote(text);
     setWeeks((prev) =>
-      prev.map((w) => (w.id === weekId ? { ...w, week_comment: text } : w)),
+      prev.map((w) => (w.id === weekId ? { ...w, week_comment: clean } : w)),
     );
-    void MesocycleRepository.updateWeekComment(weekId, text).then(() =>
+    void MesocycleRepository.updateWeekComment(weekId, clean).then(() =>
       useSessionStore.getState().loadPlanningContext(),
     );
   };
@@ -208,14 +210,15 @@ export default function PlanificacionScreen() {
     sessionIndex: number,
     text: string,
   ) => {
+    const clean = sanitizeTacticalNote(text);
     setNotesByWeek((prev) => ({
       ...prev,
       [weekId]: {
         ...(prev[weekId] ?? {}),
-        [sessionIndex]: text,
+        [sessionIndex]: clean,
       },
     }));
-    void MesocycleRepository.upsertSessionNote(weekId, sessionIndex, text).then(
+    void MesocycleRepository.upsertSessionNote(weekId, sessionIndex, clean).then(
       () => useSessionStore.getState().loadPlanningContext(),
     );
   };

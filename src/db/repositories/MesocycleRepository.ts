@@ -1,5 +1,6 @@
 import { getDatabase } from '../../../database';
 import type { MesocycleWeek, SessionNote, WeekType as PlannedWeekType } from '../../../types/mesocycle';
+import { sanitizeTacticalNote } from '../../utils/textSanitizer';
 
 interface MesocycleWeekRow {
   id: number;
@@ -56,18 +57,22 @@ export class MesocycleRepository {
       [weekId, sessionIndex],
     );
     const trimmed = result?.session_note?.trim();
-    return trimmed ? trimmed : null;
+    return trimmed ? sanitizeTacticalNote(trimmed) : null;
   }
 
   static async getNotesForWeek(weekId: number): Promise<SessionNote[]> {
     const db = await getDatabase();
-    return db.getAllAsync<SessionNote>(
+    const rows = await db.getAllAsync<SessionNote>(
       `SELECT id, week_id, session_index, session_note
        FROM planned_session_notes
        WHERE week_id = ?
        ORDER BY session_index ASC;`,
       [weekId],
     );
+    return rows.map((r) => ({
+      ...r,
+      session_note: sanitizeTacticalNote(r.session_note),
+    }));
   }
 
   static async getAllNotesByWeek(): Promise<Record<number, Record<number, string>>> {
@@ -82,7 +87,7 @@ export class MesocycleRepository {
       if (!map[row.week_id]) {
         map[row.week_id] = {};
       }
-      map[row.week_id][row.session_index] = row.session_note;
+      map[row.week_id][row.session_index] = sanitizeTacticalNote(row.session_note);
     }
     return map;
   }
@@ -165,10 +170,10 @@ export class MesocycleRepository {
     weekComment: string | null,
   ): Promise<void> {
     const db = await getDatabase();
-    const cleaned = weekComment?.trim() ? weekComment : null;
+    const cleaned = weekComment ? sanitizeTacticalNote(weekComment) : null;
     await db.runAsync(
       `UPDATE mesocycle_weeks SET week_comment = ? WHERE id = ?;`,
-      [cleaned, weekId],
+      [cleaned || null, weekId],
     );
   }
 
@@ -201,9 +206,9 @@ export class MesocycleRepository {
     noteText: string,
   ): Promise<void> {
     const db = await getDatabase();
-    const trimmed = noteText.trim();
+    const clean = sanitizeTacticalNote(noteText);
 
-    if (!trimmed) {
+    if (!clean) {
       await db.runAsync(
         `DELETE FROM planned_session_notes WHERE week_id = ? AND session_index = ?;`,
         [weekId, sessionIndex],
@@ -219,13 +224,13 @@ export class MesocycleRepository {
     if (existing) {
       await db.runAsync(
         `UPDATE planned_session_notes SET session_note = ? WHERE id = ?;`,
-        [noteText, existing.id],
+        [clean, existing.id],
       );
     } else {
       await db.runAsync(
         `INSERT INTO planned_session_notes (week_id, session_index, session_note)
          VALUES (?, ?, ?);`,
-        [weekId, sessionIndex, noteText],
+        [weekId, sessionIndex, clean],
       );
     }
   }

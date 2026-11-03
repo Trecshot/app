@@ -1,4 +1,5 @@
 import { Crypto } from './src/utils/uuid';
+import { sanitizeTacticalNote } from './src/utils/textSanitizer';
 import * as SQLite from 'expo-sqlite';
 import type { Cardio, CardioBlock, CardioLog, CardioType, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, SetType, TrainingBlock, WeekType, WeeklySummary, Workout, WorkoutDetails } from './types';
 import { EXERCISE_CATALOG } from './types';
@@ -889,7 +890,7 @@ export async function saveWorkout(
       const date = workout.date;
       const weekType: WeekType = block?.type ?? workout.weekType;
       const duration = workout.durationSeconds ?? 0;
-      const notes = workout.notes?.trim() ? workout.notes.trim() : null;
+      const notes = workout.notes ? sanitizeTacticalNote(workout.notes) : null;
       const blockId = block?.id ?? null;
 
       // 0. Consultar marcas históricas MAX(weight) antes de insertar los nuevos exercise_logs
