@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
-import * as Crypto from 'expo-crypto';
+import { Crypto } from '../../src/utils/uuid';
 import { router, useFocusEffect } from 'expo-router';
 import { Settings, Maximize, RotateCcw } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';

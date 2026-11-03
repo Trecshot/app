@@ -8,7 +8,7 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
-import { Minus, Check, Flame, Zap, Shield, ChevronDown } from 'lucide-react-native';
+import { Minus, Check, Flame, Zap, Shield, ChevronDown, TrendingUp } from 'lucide-react-native';
 import { COLORS, SPACING, GLOBAL_STYLES, theme } from '../../theme';
 import { useWorkoutStore } from '../../store/useWorkoutStore';
 import { useWorkoutTimer } from '../../hooks/useWorkoutTimer';
@@ -21,6 +21,8 @@ export const getSetTypeColor = (type: SetType = 'NORMAL') => {
       return theme.colors.dropSetIndicator; // Crimson traslúcido
     case 'WARMUP':
       return theme.colors.warmupIndicator; // Amber traslúcido
+    case 'APPROACH':
+      return theme.colors.approachIndicator; // Sky blue traslúcido
     default:
       return theme.colors.normalSet; // Transparent/Base
   }
@@ -39,15 +41,23 @@ const SET_TYPE_OPTIONS: {
     shortLabel: 'N',
     pillText: 'Normal',
     label: 'Serie Normal',
-    description: 'Serie efectiva de trabajo',
+    description: 'Serie efectiva principal de máxima carga',
     accentColor: COLORS.primary,
+  },
+  {
+    type: 'APPROACH',
+    shortLabel: 'A',
+    pillText: 'Aprox',
+    label: 'Aproximación',
+    description: 'Calibración previa al peso de trabajo (sin fatiga)',
+    accentColor: COLORS.approachAccent,
   },
   {
     type: 'WARMUP',
     shortLabel: 'W',
     pillText: 'Warmup',
-    label: 'Calentamiento (Warmup)',
-    description: 'Serie de aproximación',
+    label: 'Calentamiento',
+    description: 'Activación inicial y movilidad con cargas livianas',
     accentColor: COLORS.warmupAccent,
   },
   {
@@ -55,7 +65,7 @@ const SET_TYPE_OPTIONS: {
     shortLabel: 'D',
     pillText: 'Drop',
     label: 'Drop Set',
-    description: 'Reducción de carga al fallo',
+    description: 'Reducción de carga al fallo muscular',
     accentColor: COLORS.dropSetAccent,
   },
 ];
@@ -198,6 +208,8 @@ const SetRowComponent = ({
       ? COLORS.dropSetAccent
       : currentSetType === 'WARMUP'
       ? COLORS.warmupAccent
+      : currentSetType === 'APPROACH'
+      ? COLORS.approachAccent
       : COLORS.primaryDark;
 
   return (
@@ -208,16 +220,18 @@ const SetRowComponent = ({
           { backgroundColor: getSetTypeColor(currentSetType) },
           currentSetType === 'DROP_SET' && styles.rowDropSetBorder,
           currentSetType === 'WARMUP' && styles.rowWarmupBorder,
+          currentSetType === 'APPROACH' && styles.rowApproachBorder,
           isCompleted && currentSetType === 'NORMAL' && styles.rowCompleted,
           isCompleted && currentSetType !== 'NORMAL' && styles.rowCompletedTyped,
         ]}
       >
-        {/* Selector compacto visible de tipo de serie (NORMAL / WARMUP / DROP_SET) */}
+        {/* Selector compacto visible de tipo de serie (NORMAL / APPROACH / WARMUP / DROP_SET) */}
         <TouchableOpacity
           style={[
             styles.setTypeSelector,
             currentSetType === 'DROP_SET' && styles.setTypeSelectorDrop,
             currentSetType === 'WARMUP' && styles.setTypeSelectorWarmup,
+            currentSetType === 'APPROACH' && styles.setTypeSelectorApproach,
           ]}
           onPress={() => setIsTypePickerVisible(true)}
           activeOpacity={0.7}
@@ -287,7 +301,7 @@ const SetRowComponent = ({
             <Pressable style={styles.modalCard} onPress={() => undefined}>
               <Text style={styles.modalTitle}>Tipo de Serie #{setNumber}</Text>
               <Text style={styles.modalSubtitle}>
-                Las series de calentamiento y drop sets se excluyen del cálculo de PR Absoluto.
+                Las series de aproximación, calentamiento y drop sets se excluyen del cálculo de PR Absoluto (solo series normales de 1 a 3 reps califican).
               </Text>
 
               <View style={styles.segmentedList}>
@@ -319,6 +333,8 @@ const SetRowComponent = ({
                           <Flame size={14} color="#FFFFFF" />
                         ) : option.type === 'WARMUP' ? (
                           <Zap size={14} color="#000000" />
+                        ) : option.type === 'APPROACH' ? (
+                          <TrendingUp size={14} color="#000000" />
                         ) : (
                           <Shield size={14} color="#000000" />
                         )}
@@ -369,6 +385,10 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: COLORS.warmupAccent,
   },
+  rowApproachBorder: {
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.approachAccent,
+  },
   rowCompleted: {
     backgroundColor: 'rgba(163, 230, 53, 0.12)',
   },
@@ -395,6 +415,10 @@ const styles = StyleSheet.create({
   setTypeSelectorWarmup: {
     backgroundColor: 'rgba(234, 179, 8, 0.18)',
     borderColor: 'rgba(234, 179, 8, 0.45)',
+  },
+  setTypeSelectorApproach: {
+    backgroundColor: 'rgba(56, 189, 248, 0.16)',
+    borderColor: 'rgba(56, 189, 248, 0.45)',
   },
   setNumber: {
     fontWeight: '800',

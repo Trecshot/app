@@ -1,4 +1,4 @@
-import * as Crypto from 'expo-crypto';
+import { Crypto } from '../../utils/uuid';
 import {
   createTrainingBlock,
   findTrainingBlockForDate,

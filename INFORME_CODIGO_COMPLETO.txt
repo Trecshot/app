@@ -18,7 +18,8 @@ convencionales con servidores externos:
   sin forzar rutinas previas, o estructurar mesociclos de hasta 10 semanas
   con transicion automatica entre bloques de Carga y Descarga.
 - Medicion estricta de Records Personales (PRs): Discrimina series efectivas
-  de series de calentamiento y drop sets para evitar metricas falsas.
+  de series de aproximacion, calentamiento y drop sets para evitar metricas falsas.
+  Solo califica la serie de tipo NORMAL unica y maxima en rango de 1 a 3 reps (criterio de singularidad).
 - Temporizador nativo inter-series: Opera con el hardware del kernel de Android
   para sonar y vibrar aunque la pantalla este apagada o el telefono en reposo.
 
@@ -310,7 +311,7 @@ Resolucion de Dependencias Peer y Actualizaciones:
   │       ├── ExerciseBottomSheet.tsx -> Selector modal de grupos musculares y ejercicios
   │       ├── ExerciseCard.tsx        -> Bloque contenedor de un ejercicio y sus series
   │       ├── NewBlockModal.tsx       -> Modal de seleccion de bloque (Carga/Descarga) con libertad absoluta
-  │       ├── SetRow.tsx              -> Fila de serie con selector Normal/Warmup/Drop
+  │       ├── SetRow.tsx              -> Fila de serie con selector Normal/Aproximacion/Warmup/Drop
   │       ├── TimerDisplay.tsx        -> Temporizador inter-series desplegable (1:00 a 5:00)
   │       ├── WorkoutHistoryCard.tsx  -> Tarjeta de resumen de sesion pasada en Historial
   │       └── WorkoutSummaryModal.tsx -> Modal de finalizacion y celebracion de PRs
@@ -325,10 +326,11 @@ Resolucion de Dependencias Peer y Actualizaciones:
   │   ├── useSessionStore.ts          -> Cronometro general, bloques y puente con mesociclo
   │   └── useWorkoutStore.ts          -> Borrador de rutina activa (ejercicios y series)
   ├── utils/
-  │   ├── prEngine.ts                 -> Reglas algoritmicas de PR Absoluto
-  │   └── restNotifications.ts        -> Disparo nativo de alarmas con AlarmManager
+  │   ├── prEngine.ts                 -> Reglas algoritmicas de PR Absoluto (1-3 reps, unicidad, NORMAL)
+  │   ├── restNotifications.ts        -> Disparo nativo de alarmas con AlarmManager
+  │   └── uuid.ts                     -> Generador universal RFC4122 v4 puro (reemplazo seguro de ExpoCrypto)
   └── theme.ts                        -> Paleta de colores, espaciados y estilos globales
-- database.ts                         -> Esquema DDL SQLite, migraciones v1-v7 y catalogo
+- database.ts                         -> Esquema DDL SQLite, migraciones v1-v8 y catalogo
 - types.ts / types/                   -> Definicion de tipos TypeScript (workout, mesocycle)
 - app.json                            -> Configuracion de Expo, permisos nativos y plugins
 - package.json                        -> Dependencias SDK 58 y scripts de verificacion

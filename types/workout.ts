@@ -99,7 +99,7 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
 ];
 
 // Estructura y tipificación de una serie
-export type SetType = 'NORMAL' | 'DROP_SET' | 'WARMUP';
+export type SetType = 'NORMAL' | 'APPROACH' | 'WARMUP' | 'DROP_SET';
 
 export interface WorkoutSet {
   id: string;

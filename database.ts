@@ -1,4 +1,4 @@
-import * as Crypto from 'expo-crypto';
+import { Crypto } from './src/utils/uuid';
 import * as SQLite from 'expo-sqlite';
 import type { Cardio, CardioBlock, CardioLog, CardioType, Ejercicio, ExerciseLog, MuscleGroup, SesionEntrenamiento, SetType, TrainingBlock, WeekType, WeeklySummary, Workout, WorkoutDetails } from './types';
 import { EXERCISE_CATALOG } from './types';
@@ -517,16 +517,19 @@ async function migrateNumericTypesAndPRColumns(db: SQLite.SQLiteDatabase): Promi
   `);
 
   const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
-  if ((version?.user_version ?? 0) >= 7) return;
-
-  // Forzar conversión a INTEGER y REAL sobre registros preexistentes y recalcular PRs históricos
-  await db.execAsync(`
-    UPDATE exercise_logs
-    SET reps = CAST(reps AS INTEGER),
-        weight = CAST(weight AS REAL);
-  `);
-  await recalculateAllHistoricalPRs(db);
-  await db.execAsync('PRAGMA user_version = 7;');
+  if ((version?.user_version ?? 0) < 7) {
+    // Forzar conversión a INTEGER y REAL sobre registros preexistentes
+    await db.execAsync(`
+      UPDATE exercise_logs
+      SET reps = CAST(reps AS INTEGER),
+          weight = CAST(weight AS REAL);
+    `);
+  }
+  if ((version?.user_version ?? 0) < 8) {
+    // v8: Recalcular PRs bajo el nuevo modelo: 1-3 reps, solo series NORMAL y criterio de unicidad
+    await recalculateAllHistoricalPRs(db);
+    await db.execAsync('PRAGMA user_version = 8;');
+  }
 }
 
 async function ensureMesocycleTables(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -571,7 +574,7 @@ export async function getHistoricalMaxWeights(
        exercise_name AS exerciseName,
        MAX(CAST(weight AS REAL)) AS maxWeight
      FROM exercise_logs
-     WHERE CAST(reps AS INTEGER) > 0
+     WHERE CAST(reps AS INTEGER) BETWEEN 1 AND 3
        AND CAST(weight AS REAL) > 0
        AND COALESCE(set_type, 'NORMAL') = 'NORMAL'
        AND (? IS NULL OR workout_id != ?)

@@ -69,7 +69,7 @@ function toCardProps(session: SesionEntrenamiento): WorkoutHistoryCardProps & { 
                 (s.setType ?? 'NORMAL') === 'NORMAL' &&
                 Boolean(s.isPr) &&
                 s.reps >= 1 &&
-                s.reps <= 5 &&
+                s.reps <= 3 &&
                 s.pesoKg > 0,
             ).length,
           0,

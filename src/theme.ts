@@ -18,6 +18,8 @@ export const COLORS = {
   dropSetAccent: '#EF4444', // Rojo tenue sólido para Drop Set / Fallo
   warmupIndicator: 'rgba(234, 179, 8, 0.16)', // Amarillo mostaza traslúcido para Warmup
   warmupAccent: '#EAB308', // Amarillo mostaza sólido para serie Calentamiento
+  approachIndicator: 'rgba(56, 189, 248, 0.16)', // Celeste traslúcido para fila Aproximación
+  approachAccent: '#38BDF8', // Celeste sólido para serie Aproximación
   normalSet: 'transparent', // Base transparente para serie normal
 };
 

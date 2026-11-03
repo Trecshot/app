@@ -79,7 +79,7 @@ export const WorkoutHistoryCard = ({
               setType === 'NORMAL' &&
               Boolean(s.isPr) &&
               reps >= 1 &&
-              reps <= 5 &&
+              reps <= 3 &&
               weight > 0,
           };
         }),
@@ -105,7 +105,7 @@ export const WorkoutHistoryCard = ({
               setType === 'NORMAL' &&
               Boolean(s.isPr) &&
               reps >= 1 &&
-              reps <= 5 &&
+              reps <= 3 &&
               weight > 0,
           };
         }),
@@ -272,6 +272,13 @@ export const WorkoutHistoryCard = ({
                           <View style={[styles.setPrTag, { backgroundColor: COLORS.dropSetIndicator }]}>
                             <Text style={[styles.setPrTagText, { color: COLORS.dropSetAccent }]}>
                               Drop Set
+                            </Text>
+                          </View>
+                        )}
+                        {s.setType === 'APPROACH' && (
+                          <View style={[styles.setPrTag, { backgroundColor: COLORS.approachIndicator }]}>
+                            <Text style={[styles.setPrTagText, { color: COLORS.approachAccent }]}>
+                              Aproximación
                             </Text>
                           </View>
                         )}

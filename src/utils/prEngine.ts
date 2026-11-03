@@ -1,12 +1,93 @@
 import type { Ejercicio, Serie, SetType, WeekType, WorkoutExerciseBlock, WorkoutSet } from '../../types';
 
+export interface TrainingSet {
+  id: string | number;
+  weight: number;
+  reps: number;
+  type: SetType;
+}
+
+export interface PREvaluationResult {
+  isPR: boolean;
+  prSetId: string | number | null;
+  prWeight: number | null;
+}
+
 /**
- * Excluye explícitamente las series de calentamiento (WARMUP) y drop sets (DROP_SET)
- * antes de procesar el cálculo algorítmico del récord absoluto.
+ * Evalúa si alguna serie dentro de un ejercicio califica como PR Absoluto en la sesión actual.
+ *
+ * Condiciones requeridas:
+ * 1. Filtro de tipo: Únicamente series 'NORMAL'.
+ * 2. Rango de repeticiones: Estrictamente entre 1 y 3 repeticiones (1 <= reps <= 3).
+ * 3. Carga estrictamente mayor al récord histórico previo.
+ * 4. Carga máxima de la sesión: Es el peso más alto entre las series normales del ejercicio.
+ * 5. Criterio de Singularidad / Unicidad Absoluta: Solo puede haber exactamente 1 serie con
+ *    ese peso máximo en la sesión. Si hay 2 o más series con el mismo kilaje (ej: 3x3 con 100 kg),
+ *    se clasifica como bloque de volumen pesado y NO califica como PR individual.
+ */
+export function evaluateExercisePR(
+  sets: TrainingSet[],
+  previousRecordWeight: number = 0,
+): PREvaluationResult {
+  // 1. Filtrar únicamente series elegibles: tipo NORMAL, 1 a 3 reps y peso > 0
+  const eligibleSets = sets.filter(
+    (s) => s.type === 'NORMAL' && s.reps >= 1 && s.reps <= 3 && s.weight > 0,
+  );
+
+  if (eligibleSets.length === 0) {
+    return { isPR: false, prSetId: null, prWeight: null };
+  }
+
+  // 2. Determinar el peso máximo dentro de las series elegibles de la sesión
+  const maxSessionWeight = Math.max(...eligibleSets.map((s) => s.weight));
+
+  // Verificar que ninguna otra serie NORMAL de la sesión haya superado este peso
+  const normalSets = sets.filter((s) => s.type === 'NORMAL' && s.weight > 0);
+  const maxNormalWeightInSession = Math.max(...normalSets.map((s) => s.weight));
+  if (maxSessionWeight < maxNormalWeightInSession) {
+    return { isPR: false, prSetId: null, prWeight: null };
+  }
+
+  // 3. Regla histórica: debe superar estrictamente la marca previa registrada en 1-3 reps
+  if (maxSessionWeight <= previousRecordWeight) {
+    return { isPR: false, prSetId: null, prWeight: null };
+  }
+
+  // 4. Regla de Unicidad Absoluta:
+  // Contar cuántas series NORMAL en la sesión alcanzaron este peso máximo
+  const setsAtMaxWeight = normalSets.filter((s) => s.weight === maxSessionWeight);
+
+  // Si hay más de una serie con ese peso (ej: 3 series de 3 con 100 kg), no es PR individual
+  if (setsAtMaxWeight.length > 1) {
+    return { isPR: false, prSetId: null, prWeight: null };
+  }
+
+  // 5. Asignar la marca a la serie única ganadora
+  const winningSet = setsAtMaxWeight[0];
+
+  // Comprobar que la serie ganadora pertenezca al rango de 1 a 3 reps
+  if (winningSet.reps < 1 || winningSet.reps > 3) {
+    return { isPR: false, prSetId: null, prWeight: null };
+  }
+
+  return {
+    isPR: true,
+    prSetId: winningSet.id,
+    prWeight: winningSet.weight,
+  };
+}
+
+/**
+ * Excluye explícitamente aproximaciones (APPROACH), calentamiento (WARMUP) y drop sets (DROP_SET)
+ * antes de procesar el cálculo algorítmico del récord absoluto en el rango de 1 a 3 reps.
  */
 export const calculateAbsolutePR = (sets: WorkoutSet[]): number => {
   const effectiveSets = sets.filter(
-    (set) => (set.setType ?? 'NORMAL') === 'NORMAL' && set.isCompleted,
+    (set) =>
+      (set.setType ?? 'NORMAL') === 'NORMAL' &&
+      set.isCompleted &&
+      toStrictIntegerReps(set.reps) >= 1 &&
+      toStrictIntegerReps(set.reps) <= 3,
   );
   if (effectiveSets.length === 0) return 0;
 
@@ -15,11 +96,8 @@ export const calculateAbsolutePR = (sets: WorkoutSet[]): number => {
 
 /**
  * Categoría de validación de una serie frente al historial de SQLite:
- * - `PR_ABSOLUTO`: Cumple simultáneamente:
- *   1) Semana de carga (`tipoSemana === 'carga'`).
- *   2) Rango de fuerza máxima de 1 a 5 repeticiones (`reps >= 1 && reps <= 5`).
- *   3) Supera estrictamente el `MAX(weight)` histórico del ejercicio (`pesoKg > maxHistorico`).
- * - `NORMATIVO`: Cualquier serie que no cumpla las 3 condiciones; se almacena como volumen normal.
+ * - `PR_ABSOLUTO`: Cumple las condiciones de PR (Carga, 1-3 reps, > histórico, serie NORMAL única).
+ * - `NORMATIVO`: Cualquier serie que no califique como PR; se almacena como volumen normal.
  */
 export type SetRecordCategory = 'PR_ABSOLUTO' | 'NORMATIVO';
 
@@ -82,7 +160,7 @@ export function getExerciseRecordKey(
 }
 
 /**
- * Evalúa si una serie individual cumple las 3 condiciones simultáneas de PR Absoluto.
+ * Evalúa si una serie individual cumple las condiciones de PR Absoluto (1 a 3 reps, tipo NORMAL).
  */
 export function isSetAbsolutePR(
   tipoSemana: WeekType,
@@ -97,20 +175,21 @@ export function isSetAbsolutePR(
   const cleanHistoricalMax = toStrictRealWeight(pesoMaximoHistoricoDelEjercicio);
 
   const esSemanaCarga = tipoSemana === 'carga';
-  const estaEnRangoReps = cleanReps >= 1 && cleanReps <= 5;
+  const estaEnRangoReps = cleanReps >= 1 && cleanReps <= 3;
   const superaPesoMaximo = cleanWeight > 0 && cleanWeight > cleanHistoricalMax;
 
-  const esPrAbsoluto = esSemanaCarga && estaEnRangoReps && superaPesoMaximo;
-  return esPrAbsoluto;
+  return esSemanaCarga && estaEnRangoReps && superaPesoMaximo;
 }
 
 /**
- * Motor de validación matemática de Récords Personales (PRs).
+ * Motor de validación de Récords Personales (PRs) para una sesión completa.
  *
- * Cumple rigurosamente las 3 condiciones simultáneas:
- * 1. `tipoSemana === 'carga'` (en semana de descarga nunca se activan PRs).
- * 2. `reps >= 1 && reps <= 5` (6 repeticiones o más se descartan automáticamente como PR).
- * 3. `pesoKg > pesoMaximoHistoricoDelEjercicio` (supera estrictamente el máximo histórico en SQLite).
+ * Aplica rigurosamente:
+ * 1. Solo en semana de 'carga'.
+ * 2. Solo series de tipo 'NORMAL'.
+ * 3. Rango de repeticiones de 1 a 3 (1 <= reps <= 3).
+ * 4. Supera estrictamente el máximo histórico previo en 1-3 reps.
+ * 5. Criterio de Singularidad / Unicidad Absoluta (solo si la carga máxima no se repitió).
  */
 export function evaluateSessionPRs(
   exercises: readonly Ejercicio[],
@@ -130,53 +209,56 @@ export function evaluateSessionPRs(
       ? toStrictRealWeight(runningMaxByKey[recordKey] ?? 0)
       : 0;
 
-    let maxValidWeightInExercise = 0;
-    let bestPrWeight = pesoMaximoHistoricoDelEjercicio;
-    let peakPrSetIndex = -1;
+    // En semana de descarga no se activan PRs
+    if (tipoSemana !== 'carga') {
+      const evaluatedSets: EvaluatedSetRecord[] = exercise.series.map((serie) => ({
+        id: serie.id,
+        reps: toStrictIntegerReps(serie.reps),
+        pesoKg: toStrictRealWeight(serie.pesoKg),
+        setType: serie.setType ?? 'NORMAL',
+        isPr: false,
+        category: 'NORMATIVO',
+        historicalMaxWeight: pesoMaximoHistoricoDelEjercicio,
+      }));
 
-    exercise.series.forEach((serie, idx) => {
-      const setType: SetType = serie.setType ?? 'NORMAL';
-      // Excluir explícitamente WARMUP y DROP_SET del cálculo de PR Absoluto
-      if (setType !== 'NORMAL') {
-        return;
-      }
+      return {
+        ...exercise,
+        series: evaluatedSets,
+        historicalMaxWeight: pesoMaximoHistoricoDelEjercicio,
+        sessionMaxWeight: 0,
+        achievedAbsolutePr: false,
+      };
+    }
 
-      const reps = toStrictIntegerReps(serie.reps);
-      const pesoKg = toStrictRealWeight(serie.pesoKg);
+    const trainingSets: TrainingSet[] = exercise.series.map((serie) => ({
+      id: serie.id,
+      reps: toStrictIntegerReps(serie.reps),
+      weight: toStrictRealWeight(serie.pesoKg),
+      type: serie.setType ?? 'NORMAL',
+    }));
 
-      if (reps >= 1 && pesoKg > maxValidWeightInExercise) {
-        maxValidWeightInExercise = pesoKg;
-      }
+    const prResult = evaluateExercisePR(trainingSets, pesoMaximoHistoricoDelEjercicio);
+    const achievedAbsolutePr = Boolean(recordKey) && prResult.isPR;
 
-      // Lógica de validación para una serie individual (3 condiciones simultáneas)
-      const esSemanaCarga = tipoSemana === 'carga';
-      const estaEnRangoReps = reps >= 1 && reps <= 5;
-      const superaPesoMaximo = pesoKg > 0 && pesoKg > bestPrWeight;
-
-      const esPrAbsoluto = esSemanaCarga && estaEnRangoReps && superaPesoMaximo;
-
-      if (esPrAbsoluto) {
-        bestPrWeight = pesoKg;
-        peakPrSetIndex = idx;
-      }
-    });
-
-    const achievedAbsolutePr = Boolean(recordKey) && peakPrSetIndex !== -1;
-
-    if (achievedAbsolutePr) {
+    if (achievedAbsolutePr && prResult.prWeight) {
       totalPrs += 1;
+      if (recordKey && prResult.prWeight > (runningMaxByKey[recordKey] ?? 0)) {
+        runningMaxByKey[recordKey] = prResult.prWeight;
+      }
     }
 
-    // Actualizar el máximo histórico conocido del ejercicio para siguientes bloques de la misma sesión
-    if (recordKey && maxValidWeightInExercise > (runningMaxByKey[recordKey] ?? 0)) {
-      runningMaxByKey[recordKey] = maxValidWeightInExercise;
-    }
+    const maxValidWeightInExercise = Math.max(
+      0,
+      ...trainingSets
+        .filter((s) => s.type === 'NORMAL' && s.reps >= 1 && s.reps <= 3)
+        .map((s) => s.weight),
+    );
 
-    const evaluatedSets: EvaluatedSetRecord[] = exercise.series.map((serie, idx) => {
+    const evaluatedSets: EvaluatedSetRecord[] = exercise.series.map((serie) => {
       const reps = toStrictIntegerReps(serie.reps);
       const pesoKg = toStrictRealWeight(serie.pesoKg);
       const setType: SetType = serie.setType ?? 'NORMAL';
-      const isPr = setType === 'NORMAL' && achievedAbsolutePr && idx === peakPrSetIndex;
+      const isPr = achievedAbsolutePr && String(serie.id) === String(prResult.prSetId);
 
       return {
         id: serie.id,
