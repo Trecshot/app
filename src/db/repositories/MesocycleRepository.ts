@@ -1,6 +1,35 @@
 import { getDatabase } from '../../../database';
-import type { MesocycleWeek, SessionNote, WeekType as PlannedWeekType } from '../../../types/mesocycle';
+import type {
+  MesocycleWeek,
+  PlannedSessionConfig,
+  SessionNote,
+  WeekType as PlannedWeekType,
+} from '../../../types/mesocycle';
+import type { MuscleGroup } from '../../../types/workout';
 import { sanitizeTacticalNote } from '../../utils/textSanitizer';
+
+function parseJsonArray<T>(val: unknown): T[] {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    try {
+      const parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? (parsed as T[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+interface RawSessionNoteRow {
+  id: number;
+  week_id: number;
+  session_index: number;
+  session_note: string;
+  target_muscles?: string | null;
+  preset_exercise_ids?: string | null;
+}
 
 interface MesocycleWeekRow {
   id: number;
@@ -44,12 +73,55 @@ export class MesocycleRepository {
     return result ? mapRowToMesocycleWeek(result) : null;
   }
 
+  static async getSessionConfig(
+    weekId: number,
+    sessionIndex: number,
+  ): Promise<PlannedSessionConfig | null> {
+    const db = await getDatabase();
+    const result = await db.getFirstAsync<RawSessionNoteRow>(
+      `SELECT id, week_id, session_index, session_note, target_muscles, preset_exercise_ids
+       FROM planned_session_notes
+       WHERE week_id = ? AND session_index = ?
+       LIMIT 1;`,
+      [weekId, sessionIndex],
+    );
+    if (!result) return null;
+    return {
+      session_note: sanitizeTacticalNote(result.session_note ?? ''),
+      target_muscles: parseJsonArray<MuscleGroup>(result.target_muscles),
+      preset_exercise_ids: parseJsonArray<string>(result.preset_exercise_ids),
+    };
+  }
+
+  static async getAllSessionConfigsByWeek(): Promise<
+    Record<number, Record<number, PlannedSessionConfig>>
+  > {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<RawSessionNoteRow>(
+      `SELECT id, week_id, session_index, session_note, target_muscles, preset_exercise_ids
+       FROM planned_session_notes
+       ORDER BY week_id ASC, session_index ASC;`,
+    );
+    const map: Record<number, Record<number, PlannedSessionConfig>> = {};
+    for (const row of rows) {
+      if (!map[row.week_id]) {
+        map[row.week_id] = {};
+      }
+      map[row.week_id][row.session_index] = {
+        session_note: sanitizeTacticalNote(row.session_note ?? ''),
+        target_muscles: parseJsonArray<MuscleGroup>(row.target_muscles),
+        preset_exercise_ids: parseJsonArray<string>(row.preset_exercise_ids),
+      };
+    }
+    return map;
+  }
+
   static async getNoteForSession(
     weekId: number,
     sessionIndex: number,
   ): Promise<string | null> {
     const db = await getDatabase();
-    const result = await db.getFirstAsync<SessionNote>(
+    const result = await db.getFirstAsync<RawSessionNoteRow>(
       `SELECT id, week_id, session_index, session_note
        FROM planned_session_notes
        WHERE week_id = ? AND session_index = ?
@@ -62,22 +134,26 @@ export class MesocycleRepository {
 
   static async getNotesForWeek(weekId: number): Promise<SessionNote[]> {
     const db = await getDatabase();
-    const rows = await db.getAllAsync<SessionNote>(
-      `SELECT id, week_id, session_index, session_note
+    const rows = await db.getAllAsync<RawSessionNoteRow>(
+      `SELECT id, week_id, session_index, session_note, target_muscles, preset_exercise_ids
        FROM planned_session_notes
        WHERE week_id = ?
        ORDER BY session_index ASC;`,
       [weekId],
     );
     return rows.map((r) => ({
-      ...r,
+      id: r.id,
+      week_id: r.week_id,
+      session_index: r.session_index,
       session_note: sanitizeTacticalNote(r.session_note),
+      target_muscles: parseJsonArray<MuscleGroup>(r.target_muscles),
+      preset_exercise_ids: parseJsonArray<string>(r.preset_exercise_ids),
     }));
   }
 
   static async getAllNotesByWeek(): Promise<Record<number, Record<number, string>>> {
     const db = await getDatabase();
-    const rows = await db.getAllAsync<SessionNote>(
+    const rows = await db.getAllAsync<RawSessionNoteRow>(
       `SELECT id, week_id, session_index, session_note
        FROM planned_session_notes
        ORDER BY week_id ASC, session_index ASC;`,
@@ -200,15 +276,26 @@ export class MesocycleRepository {
     });
   }
 
-  static async upsertSessionNote(
+  static async upsertSessionConfig(
     weekId: number,
     sessionIndex: number,
-    noteText: string,
+    config: {
+      session_note?: string | null;
+      target_muscles?: MuscleGroup[];
+      preset_exercise_ids?: string[];
+    },
   ): Promise<void> {
     const db = await getDatabase();
-    const clean = sanitizeTacticalNote(noteText);
+    const cleanNote = sanitizeTacticalNote(config.session_note ?? '');
+    const targetMuscles = config.target_muscles ?? [];
+    const presetExerciseIds = config.preset_exercise_ids ?? [];
+    const targetMusclesJson = JSON.stringify(targetMuscles);
+    const presetExerciseIdsJson = JSON.stringify(presetExerciseIds);
 
-    if (!clean) {
+    const isEmpty =
+      !cleanNote && targetMuscles.length === 0 && presetExerciseIds.length === 0;
+
+    if (isEmpty) {
       await db.runAsync(
         `DELETE FROM planned_session_notes WHERE week_id = ? AND session_index = ?;`,
         [weekId, sessionIndex],
@@ -223,16 +310,31 @@ export class MesocycleRepository {
 
     if (existing) {
       await db.runAsync(
-        `UPDATE planned_session_notes SET session_note = ? WHERE id = ?;`,
-        [clean, existing.id],
+        `UPDATE planned_session_notes
+         SET session_note = ?, target_muscles = ?, preset_exercise_ids = ?
+         WHERE id = ?;`,
+        [cleanNote, targetMusclesJson, presetExerciseIdsJson, existing.id],
       );
     } else {
       await db.runAsync(
-        `INSERT INTO planned_session_notes (week_id, session_index, session_note)
-         VALUES (?, ?, ?);`,
-        [weekId, sessionIndex, clean],
+        `INSERT INTO planned_session_notes (week_id, session_index, session_note, target_muscles, preset_exercise_ids)
+         VALUES (?, ?, ?, ?, ?);`,
+        [weekId, sessionIndex, cleanNote, targetMusclesJson, presetExerciseIdsJson],
       );
     }
+  }
+
+  static async upsertSessionNote(
+    weekId: number,
+    sessionIndex: number,
+    noteText: string,
+  ): Promise<void> {
+    const existing = await MesocycleRepository.getSessionConfig(weekId, sessionIndex);
+    await MesocycleRepository.upsertSessionConfig(weekId, sessionIndex, {
+      session_note: noteText,
+      target_muscles: existing?.target_muscles ?? [],
+      preset_exercise_ids: existing?.preset_exercise_ids ?? [],
+    });
   }
 
   static async deleteWeek(weekId: number): Promise<void> {

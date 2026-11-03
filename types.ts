@@ -3,6 +3,7 @@ export * from './types/workout';
 export type {
   MesocycleWeek,
   SessionNote,
+  PlannedSessionConfig,
   WeekType as PlannedWeekType,
 } from './types/mesocycle';
 

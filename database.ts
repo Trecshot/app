@@ -147,6 +147,8 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
         week_id INTEGER NOT NULL,
         session_index INTEGER NOT NULL,
         session_note TEXT NOT NULL,
+        target_muscles TEXT DEFAULT '[]',
+        preset_exercise_ids TEXT DEFAULT '[]',
         FOREIGN KEY (week_id) REFERENCES mesocycle_weeks(id) ON DELETE CASCADE
       );
     `);
@@ -533,6 +535,16 @@ async function migrateNumericTypesAndPRColumns(db: SQLite.SQLiteDatabase): Promi
   }
 }
 
+async function migratePlannedSessionPreloads(db: SQLite.SQLiteDatabase): Promise<void> {
+  const noteColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(planned_session_notes);');
+  if (!noteColumns.some((col) => col.name === 'target_muscles')) {
+    await db.execAsync("ALTER TABLE planned_session_notes ADD COLUMN target_muscles TEXT DEFAULT '[]';");
+  }
+  if (!noteColumns.some((col) => col.name === 'preset_exercise_ids')) {
+    await db.execAsync("ALTER TABLE planned_session_notes ADD COLUMN preset_exercise_ids TEXT DEFAULT '[]';");
+  }
+}
+
 async function ensureMesocycleTables(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     PRAGMA foreign_keys = ON;
@@ -551,9 +563,12 @@ async function ensureMesocycleTables(db: SQLite.SQLiteDatabase): Promise<void> {
         week_id INTEGER NOT NULL,
         session_index INTEGER NOT NULL,
         session_note TEXT NOT NULL,
+        target_muscles TEXT DEFAULT '[]',
+        preset_exercise_ids TEXT DEFAULT '[]',
         FOREIGN KEY (week_id) REFERENCES mesocycle_weeks(id) ON DELETE CASCADE
     );
   `);
+  await migratePlannedSessionPreloads(db);
 }
 
 /**

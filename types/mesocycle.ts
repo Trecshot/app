@@ -1,3 +1,5 @@
+import type { MuscleGroup } from './workout';
+
 export type WeekType = 'CARGA' | 'DESCARGA';
 
 export interface MesocycleWeek {
@@ -10,8 +12,16 @@ export interface MesocycleWeek {
 }
 
 export interface SessionNote {
-  id: number;
+  id?: number;
   week_id: number;
   session_index: number;
   session_note: string;
+  target_muscles?: MuscleGroup[];
+  preset_exercise_ids?: string[];
+}
+
+export interface PlannedSessionConfig {
+  session_note: string;
+  target_muscles: MuscleGroup[];
+  preset_exercise_ids: string[];
 }

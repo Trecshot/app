@@ -306,13 +306,15 @@ Resolucion de Dependencias Peer y Actualizaciones:
   ├── icon.png, splash-icon.png, etc. -> Recursos graficos de la aplicacion
 - src/
   ├── components/
+  │   ├── planning/
+  │   │   └── SessionConfigModal.tsx  -> Modal de configuracion tactica y pre-carga predictiva por sesion ordinal
   │   ├── ui/
   │   │   └── ConfirmModal.tsx        -> Modal customizado oscuro de confirmación/alertas (reemplazo de Alert.alert)
   │   └── workout/
   │       ├── BlockIndicator.tsx      -> Badge de tipo de semana y sesion ordinal
   │       ├── CardioCard.tsx          -> Tarjeta para bloques de cardio
   │       ├── ExerciseBottomSheet.tsx -> Selector modal de grupos musculares y ejercicios
-  │       ├── ExerciseCard.tsx        -> Bloque contenedor de un ejercicio y sus series
+  │       ├── ExerciseCard.tsx        -> Bloque contenedor de un ejercicio y sus series (prioriza sugeridos de la sesion)
   │       ├── NewBlockModal.tsx       -> Modal de seleccion de bloque (Carga/Descarga) con libertad absoluta
   │       ├── SetRow.tsx              -> Fila de serie con selector Normal/Aproximacion/Warmup/Drop
   │       ├── TimerDisplay.tsx        -> Temporizador inter-series desplegable (1:00 a 5:00)
@@ -322,13 +324,13 @@ Resolucion de Dependencias Peer y Actualizaciones:
   │   └── planQueries.ts          -> Transacciones de limpieza y evaluacion de fin de mesociclo (Opcion A)
   ├── db/
   │   └── repositories/
-  │       ├── MesocycleRepository.ts  -> Consultas y transacciones de semanas y notas tacticas
+  │       ├── MesocycleRepository.ts  -> Consultas, migraciones y transacciones de semanas, notas y pre-cargas
   │       └── WorkoutRepository.ts    -> Persistencia SQLite de workouts, logs y PRs
   ├── hooks/
   │   ├── useWorkoutHistory.ts        -> Hook de carga reactiva del historial
   │   └── useWorkoutTimer.ts          -> Hook del temporizador inter-series con timestamps
   ├── store/
-  │   ├── useSessionStore.ts          -> Cronometro general, bloques y puente con mesociclo
+  │   ├── useSessionStore.ts          -> Cronometro general, bloques, puente con mesociclo y pre-carga predictiva
   │   └── useWorkoutStore.ts          -> Borrador de rutina activa (ejercicios y series)
   ├── utils/
   │   ├── prEngine.ts                 -> Reglas algoritmicas de PR Absoluto (1-3 reps, unicidad, NORMAL)
@@ -336,13 +338,42 @@ Resolucion de Dependencias Peer y Actualizaciones:
   │   ├── textSanitizer.ts            -> Sanitizador de formulas y comandos LaTeX a texto plano limpio
   │   └── uuid.ts                     -> Generador universal RFC4122 v4 puro (reemplazo seguro de ExpoCrypto)
   └── theme.ts                        -> Paleta de colores, espaciados y estilos globales
-- database.ts                         -> Esquema DDL SQLite, migraciones v1-v8 y catalogo
+- database.ts                         -> Esquema DDL SQLite, migraciones v1-v8, pre-cargas y catalogo
 - types.ts / types/                   -> Definicion de tipos TypeScript (workout, mesocycle)
 - app.json                            -> Configuracion de Expo, permisos nativos y plugins
 - package.json                        -> Dependencias SDK 58 y scripts de verificacion
 
 ================================================================================
-11. ESTADO ACTUAL DE CALIDAD Y CODIGO
+11. MODULO DE CARGA PREDICTIVA DE SESION (PRE-LOAD TACTICO)
+================================================================================
+Permite a los usuarios que planifican su mesociclo definir de antemano el enfoque
+muscular y los ejercicios fijos para cada sesion ordinal (ej. Sesion 1/7 o 1/4):
+
+1. Modelo de Datos en SQLite:
+   - Columnas `target_muscles TEXT DEFAULT '[]'` y `preset_exercise_ids TEXT DEFAULT '[]'`
+     en la tabla `planned_session_notes`.
+   - Migracion automatica no destructiva `migratePlannedSessionPreloads(db)` ejecutada
+     al inicializar la app y las tablas de mesociclo.
+
+2. Modal de Configuracion Ordinal (`SessionConfigModal.tsx`):
+   - Al tocar cualquier sesion ordinal en la pestaña Planificacion, se abre una hoja
+     modal oscura limpia con dos secciones:
+     * Nota Tactica: Input de directriz tactica con sanitizacion LaTeX automatica.
+     * Pre-carga Opcional: Selector multiple de chips de grupos musculares (Pecho, Espalda, etc.)
+       y selector de ejercicios del catalogo oficial con buscador y filtro por grupo muscular.
+   - Las sesiones configuradas exhiben resumen visual compacto con chips de enfoque
+     y conteo de ejercicios pre-cargados.
+
+3. Inyeccion Automatica en Pantalla Entrenar (`app/(tabs)/index.tsx`):
+   - Al entrar a una sesion limpia (!isActive y sin ejercicios aun), se autoseleccionan
+     los chips de enfoque correspondientes y se pre-montan las tarjetas vacias de los
+     ejercicios configurados con 1 serie en blanco lista para ingresar kilos y reps.
+   - En el selector de ejercicios (`ExerciseCard.tsx`), los ejercicios planificados para
+     la sesion aparecen al inicio de la lista destacados con la insignia "Sugerido".
+   - 100% opcional: Si la sesion no tiene pre-carga, la app inicia vacia como siempre.
+
+================================================================================
+12. ESTADO ACTUAL DE CALIDAD Y CODIGO
 ================================================================================
 - TypeScript: `npx tsc --noEmit` -> 0 errores.
 - Expo Linter: `npx expo lint` -> 0 advertencias, 0 errores.

@@ -9,6 +9,7 @@ import {
   useWorkoutStore,
   WorkoutExerciseBlock,
 } from '../../store/useWorkoutStore';
+import { useSessionStore } from '../../store/useSessionStore';
 import {
   EXERCISE_CATALOG,
   MUSCLE_GROUPS,
@@ -29,6 +30,9 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
   const selectExercise = useWorkoutStore((s) => s.selectExercise);
   const updateMuscleGroup = useWorkoutStore((s) => s.updateMuscleGroup);
   const defaultRestSeconds = useWorkoutStore((s) => s.defaultRestSeconds);
+  const activeSessionPresetExerciseIds = useSessionStore(
+    (s) => s.activeSessionPresetExerciseIds,
+  );
   const { startTimer } = useWorkoutTimer();
 
   const [isGroupSheetOpen, setIsGroupSheetOpen] = useState(false);
@@ -64,14 +68,22 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
   const allSetsCompleted =
     exercise.sets.length > 0 && exercise.sets.every((s) => s.isCompleted);
 
-  // Datos adaptados para el Bottom Sheet de Ejercicios
+  // Datos adaptados para el Bottom Sheet de Ejercicios (prioriza sugeridos de la sesión)
   const exerciseSheetData = useMemo(() => {
-    return filteredExercises.map((ex) => ({
+    const isPreset = (id: string) =>
+      (activeSessionPresetExerciseIds || []).includes(id);
+    const sorted = [...filteredExercises].sort((a, b) => {
+      const aP = isPreset(a.id) ? 1 : 0;
+      const bP = isPreset(b.id) ? 1 : 0;
+      return bP - aP;
+    });
+    return sorted.map((ex) => ({
       id: ex.id,
       title: ex.name,
       subtitle: ex.muscleGroup,
+      badge: isPreset(ex.id) ? 'Sugerido' : undefined,
     }));
-  }, [filteredExercises]);
+  }, [filteredExercises, activeSessionPresetExerciseIds]);
 
   const handleSelectGroup = (item: { id: string }) => {
     const newGroup = item.id as MuscleGroup;

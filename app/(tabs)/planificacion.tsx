@@ -19,9 +19,16 @@ import {
   Sparkles,
   FileText,
   Layers,
+  Sliders,
+  Dumbbell,
+  ChevronRight,
 } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
+import {
+  SessionConfigModal,
+  SessionConfigData,
+} from '../../src/components/planning/SessionConfigModal';
 import { MesocycleRepository } from '../../src/db/repositories/MesocycleRepository';
 import {
   plannedTypeToBlockType,
@@ -29,13 +36,21 @@ import {
 } from '../../src/store/useSessionStore';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import { sanitizeTacticalNote } from '../../src/utils/textSanitizer';
-import type { MesocycleWeek, PlannedWeekType } from '../../types';
+import type { MesocycleWeek, PlannedSessionConfig, PlannedWeekType } from '../../types';
 
 const SESSION_QUOTA_OPTIONS = [4, 5, 6, 7];
 
 export default function PlanificacionScreen() {
   const [weeks, setWeeks] = useState<MesocycleWeek[]>([]);
-  const [notesByWeek, setNotesByWeek] = useState<Record<number, Record<number, string>>>({});
+  const [sessionConfigsByWeek, setSessionConfigsByWeek] = useState<
+    Record<number, Record<number, PlannedSessionConfig>>
+  >({});
+  const [activeConfigModal, setActiveConfigModal] = useState<{
+    visible: boolean;
+    week: MesocycleWeek;
+    sessionOrdinal: number;
+    config: PlannedSessionConfig;
+  } | null>(null);
   const [expandedWeekIds, setExpandedWeekIds] = useState<Record<number, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [confirmModalConfig, setConfirmModalConfig] = useState<{
@@ -59,12 +74,12 @@ export default function PlanificacionScreen() {
   const loadMesocycleData = useCallback(async () => {
     try {
       setIsLoading(true);
-      const [loadedWeeks, loadedNotes] = await Promise.all([
+      const [loadedWeeks, loadedConfigs] = await Promise.all([
         MesocycleRepository.getAllWeeks(),
-        MesocycleRepository.getAllNotesByWeek(),
+        MesocycleRepository.getAllSessionConfigsByWeek(),
       ]);
       setWeeks(loadedWeeks);
-      setNotesByWeek(loadedNotes);
+      setSessionConfigsByWeek(loadedConfigs);
     } catch (error) {
       console.error('Error al cargar la planificación del mesociclo:', error);
     } finally {
@@ -116,7 +131,7 @@ export default function PlanificacionScreen() {
     await MesocycleRepository.createPresetMesocycle(pattern);
     const loadedWeeks = await MesocycleRepository.getAllWeeks();
     setWeeks(loadedWeeks);
-    setNotesByWeek({});
+    setSessionConfigsByWeek({});
     const firstActive = loadedWeeks.find((w) => w.is_current);
     if (firstActive && currentBlock) {
       await WorkoutRepository.updateBlockType(
@@ -205,22 +220,29 @@ export default function PlanificacionScreen() {
     );
   };
 
-  const handleChangeSessionNote = (
+  const handleSaveSessionConfig = async (
     weekId: number,
     sessionIndex: number,
-    text: string,
+    data: SessionConfigData,
   ) => {
-    const clean = sanitizeTacticalNote(text);
-    setNotesByWeek((prev) => ({
+    const newConfig: PlannedSessionConfig = {
+      session_note: data.note,
+      target_muscles: data.targetMuscles,
+      preset_exercise_ids: data.presetExerciseIds,
+    };
+    setSessionConfigsByWeek((prev) => ({
       ...prev,
       [weekId]: {
         ...(prev[weekId] ?? {}),
-        [sessionIndex]: clean,
+        [sessionIndex]: newConfig,
       },
     }));
-    void MesocycleRepository.upsertSessionNote(weekId, sessionIndex, clean).then(
-      () => useSessionStore.getState().loadPlanningContext(),
-    );
+    await MesocycleRepository.upsertSessionConfig(weekId, sessionIndex, {
+      session_note: data.note,
+      target_muscles: data.targetMuscles,
+      preset_exercise_ids: data.presetExerciseIds,
+    });
+    await useSessionStore.getState().loadPlanningContext();
   };
 
   const handleDeleteWeek = (week: MesocycleWeek) => {
@@ -252,7 +274,7 @@ export default function PlanificacionScreen() {
         setConfirmModalConfig(null);
         await MesocycleRepository.clearMesocycle();
         setWeeks([]);
-        setNotesByWeek({});
+        setSessionConfigsByWeek({});
         await syncWithSessionStore();
       },
     });
@@ -348,9 +370,12 @@ export default function PlanificacionScreen() {
             {weeks.map((week) => {
               const isCarga = week.type === 'CARGA';
               const isExpanded = Boolean(expandedWeekIds[week.id]);
-              const weekNotes = notesByWeek[week.id] ?? {};
-              const configuredNotesCount = Object.values(weekNotes).filter(
-                (n) => n && n.trim().length > 0,
+              const weekConfigs = sessionConfigsByWeek[week.id] ?? {};
+              const configuredNotesCount = Object.values(weekConfigs).filter(
+                (c) =>
+                  (c.session_note && c.session_note.trim().length > 0) ||
+                  (c.target_muscles && c.target_muscles.length > 0) ||
+                  (c.preset_exercise_ids && c.preset_exercise_ids.length > 0),
               ).length;
 
               return (
@@ -551,48 +576,148 @@ export default function PlanificacionScreen() {
                         const isCurrentOrd =
                           week.is_current &&
                           currentSessionIndex === sessionOrd;
-                        const noteValue = weekNotes[sessionOrd] ?? '';
+                        const config = weekConfigs[sessionOrd];
+                        const hasNote = Boolean(
+                          config?.session_note &&
+                            config.session_note.trim().length > 0,
+                        );
+                        const hasMuscles = Boolean(
+                          config?.target_muscles &&
+                            config.target_muscles.length > 0,
+                        );
+                        const hasPresets = Boolean(
+                          config?.preset_exercise_ids &&
+                            config.preset_exercise_ids.length > 0,
+                        );
+                        const isConfigured =
+                          hasNote || hasMuscles || hasPresets;
 
                         return (
-                          <View
+                          <TouchableOpacity
                             key={sessionOrd}
                             style={[
-                              styles.sessionNoteItem,
-                              isCurrentOrd && styles.sessionNoteItemCurrent,
+                              styles.sessionCardItem,
+                              isCurrentOrd && styles.sessionCardItemCurrent,
                             ]}
+                            onPress={() =>
+                              setActiveConfigModal({
+                                visible: true,
+                                week,
+                                sessionOrdinal: sessionOrd,
+                                config: config ?? {
+                                  session_note: '',
+                                  target_muscles: [],
+                                  preset_exercise_ids: [],
+                                },
+                              })
+                            }
+                            activeOpacity={0.75}
                           >
-                            <View style={styles.sessionNoteHeader}>
-                              <Text
-                                style={[
-                                  styles.sessionOrdinalLabel,
-                                  isCurrentOrd &&
-                                    styles.sessionOrdinalLabelCurrent,
-                                ]}
-                              >
-                                Sesión {sessionOrd}/
-                                {week.total_planned_sessions}
-                              </Text>
-                              {isCurrentOrd && (
-                                <Text style={styles.currentOrdTag}>
-                                  • SESIÓN ACTUAL
+                            <View style={styles.sessionCardHeader}>
+                              <View style={styles.sessionCardHeaderLeft}>
+                                <Text
+                                  style={[
+                                    styles.sessionOrdinalLabel,
+                                    isCurrentOrd &&
+                                      styles.sessionOrdinalLabelCurrent,
+                                  ]}
+                                >
+                                  Sesión {sessionOrd}/
+                                  {week.total_planned_sessions}
                                 </Text>
-                              )}
+                                {isCurrentOrd && (
+                                  <Text style={styles.currentOrdTag}>
+                                    • SESIÓN ACTUAL
+                                  </Text>
+                                )}
+                              </View>
+
+                              <View style={styles.sessionCardConfigTrigger}>
+                                <Sliders
+                                  size={13}
+                                  color={
+                                    isConfigured
+                                      ? COLORS.primary
+                                      : COLORS.textSecondary
+                                  }
+                                />
+                                <Text
+                                  style={[
+                                    styles.sessionCardConfigTriggerText,
+                                    isConfigured &&
+                                      styles.sessionCardConfigTriggerTextActive,
+                                  ]}
+                                >
+                                  {isConfigured ? 'Configurado' : 'Configurar'}
+                                </Text>
+                                <ChevronRight
+                                  size={13}
+                                  color={COLORS.textSecondary}
+                                />
+                              </View>
                             </View>
-                            <TextInput
-                              style={styles.sessionNoteInput}
-                              value={noteValue}
-                              onChangeText={(txt) =>
-                                handleChangeSessionNote(
-                                  week.id,
-                                  sessionOrd,
-                                  txt,
-                                )
-                              }
-                              placeholder={`Directriz táctica para la Sesión ${sessionOrd}/${week.total_planned_sessions} (ej. Subir 2.5 kg en press banca con RIR 2)`}
-                              placeholderTextColor={COLORS.textSecondary}
-                              multiline
-                            />
-                          </View>
+
+                            {/* Vista previa de configuración */}
+                            {isConfigured ? (
+                              <View style={styles.sessionCardBody}>
+                                {hasNote && (
+                                  <Text
+                                    style={styles.sessionPreviewNote}
+                                    numberOfLines={2}
+                                  >
+                                    {config.session_note}
+                                  </Text>
+                                )}
+
+                                <View style={styles.sessionPreviewBadgesRow}>
+                                  {hasMuscles && (
+                                    <View style={styles.sessionPreviewMuscles}>
+                                      {config.target_muscles.map((m) => (
+                                        <View
+                                          key={m}
+                                          style={
+                                            styles.sessionPreviewMuscleBadge
+                                          }
+                                        >
+                                          <Text
+                                            style={
+                                              styles.sessionPreviewMuscleBadgeText
+                                            }
+                                          >
+                                            {m}
+                                          </Text>
+                                        </View>
+                                      ))}
+                                    </View>
+                                  )}
+
+                                  {hasPresets && (
+                                    <View
+                                      style={styles.sessionPreviewPresetsBadge}
+                                    >
+                                      <Dumbbell
+                                        size={11}
+                                        color={COLORS.primary}
+                                      />
+                                      <Text
+                                        style={styles.sessionPreviewPresetsText}
+                                      >
+                                        {config.preset_exercise_ids.length}{' '}
+                                        {config.preset_exercise_ids.length === 1
+                                          ? 'ejercicio'
+                                          : 'ejercicios'}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                            ) : (
+                              <Text style={styles.sessionPlaceholderText}>
+                                Toca para directriz táctica y pre-carga
+                                opcional...
+                              </Text>
+                            )}
+                          </TouchableOpacity>
                         );
                       })}
                     </View>
@@ -641,6 +766,27 @@ export default function PlanificacionScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Modal de Configuración Táctica y Pre-carga de Sesión */}
+      {activeConfigModal && (
+        <SessionConfigModal
+          visible={activeConfigModal.visible}
+          weekNumber={activeConfigModal.week.week_number}
+          sessionOrdinal={activeConfigModal.sessionOrdinal}
+          totalPlannedSessions={activeConfigModal.week.total_planned_sessions}
+          initialNote={activeConfigModal.config.session_note}
+          initialTargetMuscles={activeConfigModal.config.target_muscles}
+          initialPresetExerciseIds={activeConfigModal.config.preset_exercise_ids}
+          onSave={(data) => {
+            void handleSaveSessionConfig(
+              activeConfigModal.week.id,
+              activeConfigModal.sessionOrdinal,
+              data,
+            );
+          }}
+          onClose={() => setActiveConfigModal(null)}
+        />
+      )}
 
       {/* Modal Oscuro de Confirmación para Acciones de Planificación */}
       {confirmModalConfig && (
@@ -1004,25 +1150,43 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
     gap: SPACING.xs,
   },
-  sessionNoteItem: {
+  sessionCardItem: {
     backgroundColor: COLORS.surfaceHighlight,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 10,
-    padding: 10,
+    padding: 11,
   },
-  sessionNoteItemCurrent: {
+  sessionCardItemCurrent: {
     borderColor: COLORS.primaryDark,
-    backgroundColor: 'rgba(193, 225, 79, 0.14)',
+    backgroundColor: 'rgba(193, 225, 79, 0.12)',
   },
-  sessionNoteHeader: {
+  sessionCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 4,
   },
+  sessionCardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sessionCardConfigTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  sessionCardConfigTriggerText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+  },
+  sessionCardConfigTriggerTextActive: {
+    color: COLORS.primary,
+  },
   sessionOrdinalLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     color: COLORS.textPrimary,
   },
@@ -1035,16 +1199,61 @@ const styles = StyleSheet.create({
     color: COLORS.primaryDark,
     letterSpacing: 0.5,
   },
-  sessionNoteInput: {
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 13,
+  sessionCardBody: {
+    marginTop: 4,
+  },
+  sessionPreviewNote: {
+    fontSize: 12,
     color: COLORS.textPrimary,
-    minHeight: 38,
+    lineHeight: 16,
+    marginBottom: 6,
+  },
+  sessionPreviewBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 2,
+  },
+  sessionPreviewMuscles: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  sessionPreviewMuscleBadge: {
+    backgroundColor: '#1E1E1E',
+    borderWidth: 1,
+    borderColor: '#333333',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  sessionPreviewMuscleBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  sessionPreviewPresetsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(163, 230, 53, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(163, 230, 53, 0.3)',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+  },
+  sessionPreviewPresetsText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  sessionPlaceholderText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   addWeekButtonsRow: {
     flexDirection: 'row',

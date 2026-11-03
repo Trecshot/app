@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { WorkoutRepository } from '../db/repositories/WorkoutRepository';
 import { MesocycleRepository } from '../db/repositories/MesocycleRepository';
-import type { MesocycleWeek, PlannedWeekType, TrainingBlock, WeekType } from '../../types';
+import type { MesocycleWeek, MuscleGroup, PlannedWeekType, TrainingBlock, WeekType } from '../../types';
 
 /**
  * Estado del bloque semanal:
@@ -89,6 +89,8 @@ export interface SessionState {
   activeWeek: MesocycleWeek | null;
   currentSessionIndex: number;
   activeSessionNote: string | null;
+  activeSessionTargetMuscles: MuscleGroup[];
+  activeSessionPresetExerciseIds: string[];
   loadPlanningContext: () => Promise<void>;
   evaluateBlockCompletion: () => Promise<{ planCompleted: boolean; advancedWeek?: MesocycleWeek | null }>;
   clearPlanning: () => Promise<void>;
@@ -125,6 +127,8 @@ export const useSessionStore = create<SessionState>()(
       activeWeek: null,
       currentSessionIndex: 1,
       activeSessionNote: null,
+      activeSessionTargetMuscles: [],
+      activeSessionPresetExerciseIds: [],
 
       dismissDeloadSuggestion: () => {
         const currentId = get().currentBlock?.id ?? null;
@@ -186,7 +190,12 @@ export const useSessionStore = create<SessionState>()(
         try {
           const activeWeek = await MesocycleRepository.getActiveWeek();
           if (!activeWeek) {
-            set({ activeWeek: null, activeSessionNote: null });
+            set({
+              activeWeek: null,
+              activeSessionNote: null,
+              activeSessionTargetMuscles: [],
+              activeSessionPresetExerciseIds: [],
+            });
             return;
           }
 
@@ -216,7 +225,7 @@ export const useSessionStore = create<SessionState>()(
 
           const completedInBlock = Math.max(0, currentBlock.sessionCount ?? 0);
           const sessionIndex = Math.min(desiredTarget, completedInBlock + 1);
-          const note = await MesocycleRepository.getNoteForSession(
+          const sessionConfig = await MesocycleRepository.getSessionConfig(
             activeWeek.id,
             sessionIndex,
           );
@@ -224,7 +233,9 @@ export const useSessionStore = create<SessionState>()(
           set({
             activeWeek,
             currentSessionIndex: sessionIndex,
-            activeSessionNote: note,
+            activeSessionNote: sessionConfig?.session_note ?? null,
+            activeSessionTargetMuscles: sessionConfig?.target_muscles ?? [],
+            activeSessionPresetExerciseIds: sessionConfig?.preset_exercise_ids ?? [],
           });
         } catch (error) {
           console.error('Error al cargar el contexto de planificación:', error);
@@ -265,7 +276,7 @@ export const useSessionStore = create<SessionState>()(
               const nextBlockType = plannedTypeToBlockType(nextWeek.type);
               const nextTarget = nextWeek.total_planned_sessions || BLOCK_TARGET_SESSIONS;
               const newBlock = await WorkoutRepository.createBlock(nextBlockType, nextTarget);
-              const firstNote = await MesocycleRepository.getNoteForSession(nextWeek.id, 1);
+              const firstConfig = await MesocycleRepository.getSessionConfig(nextWeek.id, 1);
 
               set({
                 currentBlock: newBlock,
@@ -274,7 +285,9 @@ export const useSessionStore = create<SessionState>()(
                 showDeloadSuggestion: false,
                 activeWeek: nextWeek,
                 currentSessionIndex: 1,
-                activeSessionNote: firstNote,
+                activeSessionNote: firstConfig?.session_note ?? null,
+                activeSessionTargetMuscles: firstConfig?.target_muscles ?? [],
+                activeSessionPresetExerciseIds: firstConfig?.preset_exercise_ids ?? [],
               });
               return { planCompleted: false, advancedWeek: nextWeek };
             }
@@ -292,6 +305,8 @@ export const useSessionStore = create<SessionState>()(
           activeWeek: null,
           currentSessionIndex: 1,
           activeSessionNote: null,
+          activeSessionTargetMuscles: [],
+          activeSessionPresetExerciseIds: [],
         });
         await get().initBlock();
       },
@@ -323,7 +338,7 @@ export const useSessionStore = create<SessionState>()(
                   nextBlockType,
                   nextTarget,
                 );
-                const firstNote = await MesocycleRepository.getNoteForSession(
+                const firstConfig = await MesocycleRepository.getSessionConfig(
                   nextWeek.id,
                   1,
                 );
@@ -334,7 +349,9 @@ export const useSessionStore = create<SessionState>()(
                   showDeloadSuggestion: false,
                   activeWeek: nextWeek,
                   currentSessionIndex: 1,
-                  activeSessionNote: firstNote,
+                  activeSessionNote: firstConfig?.session_note ?? null,
+                  activeSessionTargetMuscles: firstConfig?.target_muscles ?? [],
+                  activeSessionPresetExerciseIds: firstConfig?.preset_exercise_ids ?? [],
                 });
                 return;
               }
@@ -347,8 +364,8 @@ export const useSessionStore = create<SessionState>()(
             };
 
             const sessionIndex = Math.min(target, sesionesEnBloque + 1);
-            const note = activeWeek
-              ? await MesocycleRepository.getNoteForSession(activeWeek.id, sessionIndex)
+            const sessionConfig = activeWeek
+              ? await MesocycleRepository.getSessionConfig(activeWeek.id, sessionIndex)
               : null;
 
             set({
@@ -358,14 +375,16 @@ export const useSessionStore = create<SessionState>()(
               showDeloadSuggestion: false,
               activeWeek: activeWeek ?? null,
               currentSessionIndex: sessionIndex,
-              activeSessionNote: note,
+              activeSessionNote: sessionConfig?.session_note ?? null,
+              activeSessionTargetMuscles: sessionConfig?.target_muscles ?? [],
+              activeSessionPresetExerciseIds: sessionConfig?.preset_exercise_ids ?? [],
             });
           } else if (activeWeek) {
             // Si el usuario creó una planificación antes de tener bloques, inicializar el bloque según la Semana Activa
             const initialType = plannedTypeToBlockType(activeWeek.type);
             const target = activeWeek.total_planned_sessions || BLOCK_TARGET_SESSIONS;
             const block = await WorkoutRepository.createBlock(initialType, target);
-            const firstNote = await MesocycleRepository.getNoteForSession(activeWeek.id, 1);
+            const firstConfig = await MesocycleRepository.getSessionConfig(activeWeek.id, 1);
 
             set({
               currentBlock: block,
@@ -375,7 +394,9 @@ export const useSessionStore = create<SessionState>()(
               showDeloadSuggestion: false,
               activeWeek,
               currentSessionIndex: 1,
-              activeSessionNote: firstNote,
+              activeSessionNote: firstConfig?.session_note ?? null,
+              activeSessionTargetMuscles: firstConfig?.target_muscles ?? [],
+              activeSessionPresetExerciseIds: firstConfig?.preset_exercise_ids ?? [],
             });
           } else {
             set({
@@ -387,6 +408,8 @@ export const useSessionStore = create<SessionState>()(
               activeWeek: null,
               currentSessionIndex: 1,
               activeSessionNote: null,
+              activeSessionTargetMuscles: [],
+              activeSessionPresetExerciseIds: [],
             });
           }
         } catch (error) {
@@ -406,7 +429,7 @@ export const useSessionStore = create<SessionState>()(
           const plannedType = blockTypeToPlannedType(type);
           await MesocycleRepository.updateWeekType(activeWeek.id, plannedType);
           const updatedWeek: MesocycleWeek = { ...activeWeek, type: plannedType };
-          const firstNote = await MesocycleRepository.getNoteForSession(
+          const firstConfig = await MesocycleRepository.getSessionConfig(
             activeWeek.id,
             1,
           );
@@ -419,7 +442,9 @@ export const useSessionStore = create<SessionState>()(
             dismissedBlockSuggestionId: null,
             activeWeek: updatedWeek,
             currentSessionIndex: 1,
-            activeSessionNote: firstNote,
+            activeSessionNote: firstConfig?.session_note ?? null,
+            activeSessionTargetMuscles: firstConfig?.target_muscles ?? [],
+            activeSessionPresetExerciseIds: firstConfig?.preset_exercise_ids ?? [],
           });
           return;
         }

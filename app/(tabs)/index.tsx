@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Crypto } from '../../src/utils/uuid';
 import { router, useFocusEffect } from 'expo-router';
-import { Settings, Maximize, RotateCcw } from 'lucide-react-native';
+import { Settings, Maximize, RotateCcw, Sparkles } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import { SessionStopwatchDisplay } from '../../src/components/workout/TimerDisplay';
@@ -31,6 +31,7 @@ import { MUSCLE_GROUPS, getCatalogExerciseName } from '../../types';
 
 export default function ActiveWorkoutScreen() {
   const sessionFocus = useWorkoutStore((s) => s.sessionFocus);
+  const setSessionFocus = useWorkoutStore((s) => s.setSessionFocus);
   const toggleSessionFocus = useWorkoutStore((s) => s.toggleSessionFocus);
   const exercises = useWorkoutStore((s) => s.exercises);
   const addExercise = useWorkoutStore((s) => s.addExercise);
@@ -52,7 +53,14 @@ export default function ActiveWorkoutScreen() {
   const activeWeek = useSessionStore((s) => s.activeWeek);
   const currentSessionIndex = useSessionStore((s) => s.currentSessionIndex);
   const activeSessionNote = useSessionStore((s) => s.activeSessionNote);
+  const activeSessionTargetMuscles = useSessionStore(
+    (s) => s.activeSessionTargetMuscles,
+  );
+  const activeSessionPresetExerciseIds = useSessionStore(
+    (s) => s.activeSessionPresetExerciseIds,
+  );
   const loadPlanningContext = useSessionStore((s) => s.loadPlanningContext);
+  const lastPreloadedKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     void loadPlanningContext();
@@ -67,6 +75,49 @@ export default function ActiveWorkoutScreen() {
       })();
     }, []),
   );
+
+  // 3.2 Carga Predictiva de Sesión:
+  // Al entrar a una sesión planificada limpia (!isActive y exercises vacíos),
+  // se precargan los grupos musculares del enfoque y se montan las tarjetas de ejercicios pre-cargados.
+  useEffect(() => {
+    if (!activeWeek) return;
+    const sessionKey = `${activeWeek.id}_${currentSessionIndex}`;
+
+    // Si ya procesamos la pre-carga para esta sesión, o la sesión ya está en curso, no sobreescribir
+    if (lastPreloadedKeyRef.current === sessionKey) return;
+    if (isActive) return;
+
+    const hasTargetMuscles =
+      activeSessionTargetMuscles && activeSessionTargetMuscles.length > 0;
+    const hasPresetExercises =
+      activeSessionPresetExerciseIds &&
+      activeSessionPresetExerciseIds.length > 0;
+
+    if (!hasTargetMuscles && !hasPresetExercises) return;
+
+    // Solo pre-cargar si la rutina actual está limpia (sin ejercicios añadidos)
+    if (exercises.length === 0) {
+      if (hasTargetMuscles && sessionFocus.length === 0) {
+        setSessionFocus(activeSessionTargetMuscles);
+      }
+      if (hasPresetExercises) {
+        activeSessionPresetExerciseIds.forEach((presetId) => {
+          addExercise(presetId);
+        });
+      }
+      lastPreloadedKeyRef.current = sessionKey;
+    }
+  }, [
+    activeWeek,
+    currentSessionIndex,
+    isActive,
+    exercises.length,
+    sessionFocus.length,
+    activeSessionTargetMuscles,
+    activeSessionPresetExerciseIds,
+    setSessionFocus,
+    addExercise,
+  ]);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);
@@ -404,6 +455,30 @@ export default function ActiveWorkoutScreen() {
                 </Text>
               </View>
             ) : null}
+
+            {(activeSessionTargetMuscles.length > 0 ||
+              activeSessionPresetExerciseIds.length > 0) && (
+              <View style={styles.planningPreloadBox}>
+                <Sparkles size={13} color={COLORS.primary} />
+                <Text style={styles.planningPreloadText}>
+                  Pre-carga:{' '}
+                  {activeSessionTargetMuscles.length > 0
+                    ? `Enfoque (${activeSessionTargetMuscles.join(', ')})`
+                    : ''}
+                  {activeSessionTargetMuscles.length > 0 &&
+                  activeSessionPresetExerciseIds.length > 0
+                    ? ' • '
+                    : ''}
+                  {activeSessionPresetExerciseIds.length > 0
+                    ? `${activeSessionPresetExerciseIds.length} ${
+                        activeSessionPresetExerciseIds.length === 1
+                          ? 'ejercicio'
+                          : 'ejercicios'
+                      }`
+                    : ''}
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -849,6 +924,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 19,
+  },
+  planningPreloadBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(163, 230, 53, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(163, 230, 53, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  planningPreloadText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '700',
+    flex: 1,
   },
   notesSection: {
     marginTop: SPACING.lg,
