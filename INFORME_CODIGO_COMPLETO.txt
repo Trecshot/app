@@ -73,6 +73,9 @@ El enrutador base utiliza Expo Router dentro del directorio `app/`:
   * Desplegable de Notas Tacticas por Sesion Ordinal (Sesion 1/N a N/N).
   * Plantillas rapidas (ej. "5 Carga + 1 Descarga" o "3 Carga + 1 Descarga").
   * Opcion de desactivar la planificacion para volver a modo 100% manual libre.
+  * Finalizacion de Mesociclo (Opcion A): Al terminar la ultima sesion de la ultima semana,
+    se ofrece limpiar el andamio temporal (vuelve a 0/10 sem o modo libre) manteniendo
+    100% intactos los historicos, pesos, series, volumenes y PRs registrados.
 
 ================================================================================
 3. CAPA DE BASE DE DATOS Y PERSISTENCIA (database.ts)
@@ -315,6 +318,8 @@ Resolucion de Dependencias Peer y Actualizaciones:
   │       ├── TimerDisplay.tsx        -> Temporizador inter-series desplegable (1:00 a 5:00)
   │       ├── WorkoutHistoryCard.tsx  -> Tarjeta de resumen de sesion pasada en Historial
   │       └── WorkoutSummaryModal.tsx -> Modal de finalizacion y celebracion de PRs
+  ├── database/
+  │   └── planQueries.ts          -> Transacciones de limpieza y evaluacion de fin de mesociclo (Opcion A)
   ├── db/
   │   └── repositories/
   │       ├── MesocycleRepository.ts  -> Consultas y transacciones de semanas y notas tacticas

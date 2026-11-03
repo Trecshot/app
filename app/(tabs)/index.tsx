@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import { SessionStopwatchDisplay } from '../../src/components/workout/TimerDisplay';
 import { sanitizeTacticalNote } from '../../src/utils/textSanitizer';
+import { clearCurrentPlanning } from '../../src/database/planQueries';
 import { ExerciseCard } from '../../src/components/workout/ExerciseCard';
 import { CardioCard } from '../../src/components/workout/CardioCard';
 import { WorkoutSummaryModal } from '../../src/components/workout/WorkoutSummaryModal';
@@ -85,7 +86,43 @@ export default function ActiveWorkoutScreen() {
     cancelText?: string;
     confirmDestructive?: boolean;
     onConfirm: () => void;
+    onCancel?: () => void;
   } | null>(null);
+
+  const pendingPlanCompletedRef = useRef(false);
+  const isSummaryModalOpenRef = useRef(false);
+
+  const showPlanCompletedModal = useCallback((postNavigationRoute?: string) => {
+    setConfirmModalConfig({
+      visible: true,
+      title: '¡Planificación Terminada!',
+      message:
+        'Has completado con éxito todo tu mesociclo (todas las semanas de carga y descarga).\n\nLos datos ejecutados están guardados en tu historial. La planificación actual se limpiará.\n\n¿Qué deseas hacer ahora?',
+      confirmText: 'Volver a planificar',
+      cancelText: 'Modo libre',
+      confirmDestructive: false,
+      onConfirm: async () => {
+        setConfirmModalConfig(null);
+        pendingPlanCompletedRef.current = false;
+        await clearCurrentPlanning();
+        await useSessionStore.getState().initBlock();
+        await useSessionStore.getState().loadPlanningContext();
+        router.navigate('/planificacion');
+      },
+      onCancel: async () => {
+        setConfirmModalConfig(null);
+        pendingPlanCompletedRef.current = false;
+        await clearCurrentPlanning();
+        await useSessionStore.getState().initBlock();
+        await useSessionStore.getState().loadPlanningContext();
+        if (postNavigationRoute && postNavigationRoute !== '/') {
+          router.navigate(postNavigationRoute as any);
+        } else {
+          router.navigate('/');
+        }
+      },
+    });
+  }, []);
 
   const timerStatus = isRunning
     ? '• ENTRENAMIENTO EN CURSO'
@@ -196,6 +233,7 @@ export default function ActiveWorkoutScreen() {
     setModalSummary(sessionSnapshot);
 
     // 2. Activar el Modal de forma INMEDIATA
+    isSummaryModalOpenRef.current = true;
     setIsSummaryModalVisible(true);
 
     // 3. Ejecutar el guardado en base de datos de forma asíncrona "silenciosa" (Background)
@@ -284,10 +322,17 @@ export default function ActiveWorkoutScreen() {
       setModalSummary((prev) => (prev ? { ...prev, prs: achievedPrs } : prev));
 
       await WorkoutRepository.saveSession(session, startTimestamp);
-      // Evaluar cierre de semana planificada (avanza a la siguiente si completó la cuota) y sincronizar bloque
-      await useSessionStore.getState().evaluateBlockCompletion();
-      await useSessionStore.getState().initBlock();
-      await useSessionStore.getState().loadPlanningContext();
+      // Evaluar cierre de semana planificada (avanza a la siguiente o detecta fin de mesociclo)
+      const completionResult = await useSessionStore.getState().evaluateBlockCompletion();
+      if (completionResult?.planCompleted) {
+        pendingPlanCompletedRef.current = true;
+        if (!isSummaryModalOpenRef.current) {
+          showPlanCompletedModal();
+        }
+      } else {
+        await useSessionStore.getState().initBlock();
+        await useSessionStore.getState().loadPlanningContext();
+      }
     } catch (error) {
       console.error('Error al guardar sesión:', error);
       setConfirmModalConfig({
@@ -547,16 +592,25 @@ export default function ActiveWorkoutScreen() {
       <WorkoutSummaryModal
         visible={isSummaryModalVisible}
         onClose={() => {
+          isSummaryModalOpenRef.current = false;
           resetActiveSession();
           setIsSummaryModalVisible(false);
+          if (pendingPlanCompletedRef.current) {
+            showPlanCompletedModal();
+          }
         }}
         session={modalSummary ?? { sessionFocus, exercises, cardio, notes }}
         durationSeconds={modalSummary?.durationSeconds}
         resetSession={resetActiveSession}
         onNavigateToHistory={() => {
+          isSummaryModalOpenRef.current = false;
           resetActiveSession();
           setIsSummaryModalVisible(false);
-          router.navigate('/history');
+          if (pendingPlanCompletedRef.current) {
+            showPlanCompletedModal('/history');
+          } else {
+            router.navigate('/history');
+          }
         }}
       />
 
@@ -570,7 +624,7 @@ export default function ActiveWorkoutScreen() {
           cancelText={confirmModalConfig.cancelText}
           confirmDestructive={confirmModalConfig.confirmDestructive}
           onConfirm={confirmModalConfig.onConfirm}
-          onCancel={() => setConfirmModalConfig(null)}
+          onCancel={confirmModalConfig.onCancel ?? (() => setConfirmModalConfig(null))}
         />
       )}
     </View>

@@ -283,6 +283,14 @@ export class MesocycleRepository {
   }
 
   /**
+   * Opción A: Borrado Total de la Planificación.
+   * Vacía la estructura de semanas y notas de planificación sin tocar el historial (workouts/exercise_logs).
+   */
+  static async clearCurrentPlanning(): Promise<void> {
+    return this.clearMesocycle();
+  }
+
+  /**
    * Crea una plantilla rápida de mesociclo (ej. 5 semanas de Carga + 1 semana de Descarga).
    */
   static async createPresetMesocycle(

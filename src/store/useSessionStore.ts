@@ -90,7 +90,8 @@ export interface SessionState {
   currentSessionIndex: number;
   activeSessionNote: string | null;
   loadPlanningContext: () => Promise<void>;
-  evaluateBlockCompletion: () => Promise<void>;
+  evaluateBlockCompletion: () => Promise<{ planCompleted: boolean; advancedWeek?: MesocycleWeek | null }>;
+  clearPlanning: () => Promise<void>;
 }
 
 /** Determina si el bloque ya completó su cuota de sesiones efectivas. */
@@ -239,14 +240,22 @@ export const useSessionStore = create<SessionState>()(
           ]);
 
           if (!latest || !activeWeek) {
-            return;
+            return { planCompleted: false };
           }
 
           const sesionesEnBloque = history.filter((s) => s.blockId === latest.id).length;
           const target = activeWeek.total_planned_sessions || BLOCK_TARGET_SESSIONS;
 
           if (sesionesEnBloque >= target) {
-            // El bloque actual completó su cuota (ej. 7/7): avanzar puntero a la siguiente semana planificada
+            const allWeeks = await MesocycleRepository.getAllWeeks();
+            const isLastWeek = activeWeek.week_number >= allWeeks.length;
+
+            if (isLastWeek) {
+              // Completó la última sesión de la última semana del mesociclo
+              return { planCompleted: true };
+            }
+
+            // El bloque actual completó su cuota: avanzar puntero a la siguiente semana planificada
             const nextWeek = await MesocycleRepository.advanceToNextWeek(
               activeWeek.id,
               activeWeek.week_number,
@@ -267,12 +276,24 @@ export const useSessionStore = create<SessionState>()(
                 currentSessionIndex: 1,
                 activeSessionNote: firstNote,
               });
-              return;
+              return { planCompleted: false, advancedWeek: nextWeek };
             }
           }
+          return { planCompleted: false };
         } catch (error) {
           console.error('Error al evaluar la transición del mesociclo:', error);
+          return { planCompleted: false };
         }
+      },
+
+      clearPlanning: async () => {
+        await MesocycleRepository.clearMesocycle();
+        set({
+          activeWeek: null,
+          currentSessionIndex: 1,
+          activeSessionNote: null,
+        });
+        await get().initBlock();
       },
 
       initBlock: async () => {
