@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import { WorkoutRepository } from '../db/repositories/WorkoutRepository';
 import { formatBlockStartDate, useSessionStore } from '../store/useSessionStore';
@@ -62,36 +62,68 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
   const [history, setHistory] = useState<SesionEntrenamiento[]>([]);
   const [weeklySummary, setWeeklySummary] = useState<WeeklySummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const refreshHistory = useCallback(async () => {
-    try {
-      setLoading(true);
-      await WorkoutRepository.initSchema();
-      const [sessions, summary] = await Promise.all([
-        WorkoutRepository.getSessions(),
-        WorkoutRepository.getWeeklySummary(),
-      ]);
-      setHistory(sessions);
-      setWeeklySummary(summary);
-    } catch (error) {
-      console.error('Error al actualizar historial:', error);
-      Alert.alert('No se pudo abrir el historial', 'La base de datos local no respondió.');
-    } finally {
-      setLoading(false);
+    if (inFlightRef.current) {
+      return inFlightRef.current;
     }
+
+    const task = (async () => {
+      try {
+        if (mountedRef.current) {
+          setLoading(true);
+        }
+        await WorkoutRepository.initSchema();
+        const [sessions, summary] = await Promise.all([
+          WorkoutRepository.getSessions(),
+          WorkoutRepository.getWeeklySummary(),
+        ]);
+        if (mountedRef.current) {
+          setHistory(sessions);
+          setWeeklySummary(summary);
+        }
+      } catch (error) {
+        console.error('Error al actualizar historial:', error);
+        if (mountedRef.current) {
+          Alert.alert('No se pudo abrir el historial', 'La base de datos local no respondió.');
+        }
+      } finally {
+        inFlightRef.current = null;
+        if (mountedRef.current) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    inFlightRef.current = task;
+    return task;
   }, []);
 
   const deleteWorkout = useCallback(async (workoutId: string) => {
     try {
       await WorkoutRepository.deleteWorkoutById(workoutId);
 
-      // Actualizamos el estado local de las sesiones en memoria
-      setHistory((items) => items.filter((item) => item.id !== workoutId));
-      setWeeklySummary(await WorkoutRepository.getWeeklySummary());
+      // Refrescamos las sesiones (incluyendo PRs y contadores actualizados) y el resumen semanal
+      const [sessions, summary] = await Promise.all([
+        WorkoutRepository.getSessions(),
+        WorkoutRepository.getWeeklySummary(),
+      ]);
+      if (mountedRef.current) {
+        setHistory(sessions);
+        setWeeklySummary(summary);
+      }
 
       // Forzamos la re-evaluación del bloque activo y contexto de planificación
       await useSessionStore.getState().initBlock();
-      await useSessionStore.getState().loadPlanningContext();
 
       // Sincronizar el estado de la sesión activa en useWorkoutStore
       const sessionState = useSessionStore.getState();
@@ -111,35 +143,8 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadInitialData() {
-      try {
-        await WorkoutRepository.initSchema();
-        const [sessions, summary] = await Promise.all([
-          WorkoutRepository.getSessions(),
-          WorkoutRepository.getWeeklySummary(),
-        ]);
-        if (!cancelled) {
-          setHistory(sessions);
-          setWeeklySummary(summary);
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error('Error al cargar historial inicial:', error);
-        if (!cancelled) {
-          setLoading(false);
-          Alert.alert('No se pudo abrir el historial', 'La base de datos local no respondió.');
-        }
-      }
-    }
-
-    void loadInitialData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void refreshHistory();
+  }, [refreshHistory]);
 
   const sections = useMemo(() => groupSessionsByBlock(history), [history]);
 

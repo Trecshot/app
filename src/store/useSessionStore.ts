@@ -244,9 +244,8 @@ export const useSessionStore = create<SessionState>()(
 
       evaluateBlockCompletion: async () => {
         try {
-          const [latest, history, activeWeek] = await Promise.all([
+          const [latest, activeWeek] = await Promise.all([
             WorkoutRepository.getLatestBlock(),
-            WorkoutRepository.getSessions(),
             MesocycleRepository.getActiveWeek(),
           ]);
 
@@ -254,7 +253,7 @@ export const useSessionStore = create<SessionState>()(
             return { planCompleted: false };
           }
 
-          const sesionesEnBloque = history.filter((s) => s.blockId === latest.id).length;
+          const sesionesEnBloque = Math.max(0, latest.sessionCount ?? 0);
           const target = activeWeek.total_planned_sessions || BLOCK_TARGET_SESSIONS;
 
           if (sesionesEnBloque >= target) {
@@ -313,17 +312,20 @@ export const useSessionStore = create<SessionState>()(
 
       initBlock: async () => {
         try {
-          const [latest, history, activeWeek] = await Promise.all([
+          const [latest, activeWeek] = await Promise.all([
             WorkoutRepository.getLatestBlock(),
-            WorkoutRepository.getSessions(),
             MesocycleRepository.getActiveWeek(),
           ]);
 
           if (latest) {
-            const sesionesEnBloque = history.filter((s) => s.blockId === latest.id).length;
+            const sesionesEnBloque = Math.max(0, latest.sessionCount ?? 0);
             const target = activeWeek
               ? activeWeek.total_planned_sessions || BLOCK_TARGET_SESSIONS
               : latest.targetSessions ?? BLOCK_TARGET_SESSIONS;
+
+            if (activeWeek && latest.targetSessions !== target) {
+              await WorkoutRepository.updateBlockTargetSessions(latest.id, target);
+            }
 
             // Si existe planificación activa y el bloque alcanzó la cuota, transicionar automáticamente a la siguiente semana
             if (activeWeek && sesionesEnBloque >= target) {

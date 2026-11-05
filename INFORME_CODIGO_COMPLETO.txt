@@ -439,7 +439,28 @@ de registros, se implemento una estrategia dual de persistencia y respaldo:
      superior derecha con dialogo contextual para exportar en cualquier momento.
 
 ================================================================================
-13. ESTADO ACTUAL DE CALIDAD Y CODIGO
+13. REFACTORIZACION ARQUITECTONICA Y OPTIMIZACION DE RENDIMIENTO
+================================================================================
+1. Unificacion de Transacciones SQLite (Eliminacion de Duplicidad):
+   - Se consolido la persistencia transaccional de sesiones (`WorkoutRepository.saveSession` -> `guardarSesion` / `saveWorkout`) y el borrado de entrenamientos (`WorkoutRepository.deleteWorkoutById` -> `deleteWorkoutById`) en una unica fuente de verdad en `database.ts`, eliminando mas de 230 lineas de SQL duplicado.
+   - Se unifico `MesocycleRepository.clearMesocycle` con `clearCurrentPlanning` (`src/database/planQueries.ts`).
+   - Al eliminar una sesion en `deleteWorkoutById`, ahora se recalcula dentro de la misma transaccion atomica el contador `sessions_count` del bloque afectado y los PRs historicos (`recalculateAllHistoricalPRs`), manteniendo 100% consistente la integridad de records y bloques.
+   - Al crear automaticamente un nuevo bloque por agotamiento de cuota en `saveWorkout`, se preserva la cuota configurada (`targetSessions`) en lugar de forzar 7 sesiones.
+   - En `MesocycleRepository.advanceToNextWeek`, se verifica primero la existencia de la semana siguiente antes de desmarcar `is_current`, evitando dejar el mesociclo sin semana activa si se invoca en la ultima semana.
+
+2. Optimizacion de Consultas y Estado Reactivo (`useSessionStore` y `useWorkoutHistory`):
+   - En `initBlock` y `evaluateBlockCompletion` (`src/store/useSessionStore.ts`), se elimino la descarga redundante del historial completo (`WorkoutRepository.getSessions()`), utilizando directamente el conteo escalar SQL `latest.sessionCount` ya calculado por `getLatestTrainingBlock()`.
+   - Se eliminaron las llamadas duplicadas en cascada (`useEffect` + `useFocusEffect` y `initBlock` + `loadPlanningContext`) en `app/(tabs)/index.tsx` y `app/(tabs)/planificacion.tsx`.
+   - En `useWorkoutHistory.ts`, se anadio deduplicacion de promesas en vuelo (`inFlightRef`) para evitar consultas simultaneas repetidas al montar/enfocar la pestaña Historial.
+   - En `app/(tabs)/planificacion.tsx`, se incorporo debounce por semana (350ms) al editar el comentario semanal (`handleChangeWeekComment`) para evitar escrituras SQLite en cada pulsacion de tecla.
+
+3. Indexacion O(1) de Catalogo, Almacenamiento y Consistencia UI:
+   - Se indexo `EXERCISE_CATALOG` mediante un `Map` en `types/workout.ts` para resolucion `O(1)` en `getCatalogExerciseById` y `getCatalogExerciseName`.
+   - En `useWorkoutStore.ts`, `debouncedAsyncStorage` ahora gestiona timers independientes por clave mediante `Map<string, Timeout>`.
+   - Se reemplazo la alerta nativa en `handleOpenSettings` (`app/(tabs)/index.tsx`) por `ConfirmModal` AMOLED y se migro `SafeAreaView` en `WorkoutSummaryModal.tsx` a `react-native-safe-area-context`.
+
+================================================================================
+14. ESTADO ACTUAL DE CALIDAD Y CODIGO
 ================================================================================
 - TypeScript: `npx tsc --noEmit` -> 0 errores.
 - Expo Linter: `npx expo lint` -> 0 advertencias, 0 errores.

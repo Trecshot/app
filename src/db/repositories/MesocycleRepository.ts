@@ -1,4 +1,5 @@
 import { getDatabase } from '../../../database';
+import { clearCurrentPlanning as clearCurrentPlanningDb } from '../../database/planQueries';
 import type {
   MesocycleWeek,
   PlannedSessionConfig,
@@ -176,23 +177,27 @@ export class MesocycleRepository {
     let nextActive: MesocycleWeek | null = null;
 
     await db.withTransactionAsync(async () => {
-      // Remover flag de semana actual
+      const candidate = await db.getFirstAsync<MesocycleWeekRow>(
+        `SELECT id, week_number, type, total_planned_sessions, week_comment, is_current
+         FROM mesocycle_weeks
+         WHERE week_number = ?
+         LIMIT 1;`,
+        [currentWeekNumber + 1],
+      );
+      if (!candidate) {
+        return;
+      }
+
+      // Remover flag de semana actual y activar la siguiente semana
       await db.runAsync(
         `UPDATE mesocycle_weeks SET is_current = 0 WHERE id = ?;`,
         [currentWeekId],
       );
-      // Asignar flag a la siguiente semana si existe
       await db.runAsync(
-        `UPDATE mesocycle_weeks SET is_current = 1 WHERE week_number = ?;`,
-        [currentWeekNumber + 1],
+        `UPDATE mesocycle_weeks SET is_current = 1 WHERE id = ?;`,
+        [candidate.id],
       );
-      const nextRow = await db.getFirstAsync<MesocycleWeekRow>(
-        `SELECT id, week_number, type, total_planned_sessions, week_comment, is_current
-         FROM mesocycle_weeks
-         WHERE is_current = 1
-         LIMIT 1;`,
-      );
-      nextActive = nextRow ? mapRowToMesocycleWeek(nextRow) : null;
+      nextActive = mapRowToMesocycleWeek({ ...candidate, is_current: 1 });
     });
 
     return nextActive;
@@ -377,11 +382,7 @@ export class MesocycleRepository {
   }
 
   static async clearMesocycle(): Promise<void> {
-    const db = await getDatabase();
-    await db.withTransactionAsync(async () => {
-      await db.runAsync(`DELETE FROM planned_session_notes;`);
-      await db.runAsync(`DELETE FROM mesocycle_weeks;`);
-    });
+    await clearCurrentPlanningDb();
   }
 
   /**

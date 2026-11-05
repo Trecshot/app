@@ -17,23 +17,28 @@ export type { SetType, WorkoutExerciseBlock, WorkoutSet };
 // Alias para compatibilidad hacia atrás
 export type WorkoutExercise = WorkoutExerciseBlock;
 
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 export const debouncedAsyncStorage: StateStorage = {
   getItem: async (name: string): Promise<string | null> => {
     return await AsyncStorage.getItem(name);
   },
   setItem: (name: string, value: string): void => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
+    const existing = debounceTimers.get(name);
+    if (existing) {
+      clearTimeout(existing);
     }
-    debounceTimer = setTimeout(() => {
+    const timer = setTimeout(() => {
+      debounceTimers.delete(name);
       void AsyncStorage.setItem(name, value);
     }, 400);
+    debounceTimers.set(name, timer);
   },
   removeItem: async (name: string): Promise<void> => {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
+    const existing = debounceTimers.get(name);
+    if (existing) {
+      clearTimeout(existing);
+      debounceTimers.delete(name);
     }
     await AsyncStorage.removeItem(name);
   },

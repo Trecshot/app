@@ -142,9 +142,14 @@ export interface WorkoutSession {
   cardio: CardioBlock[]; // Array opcional para soportar múltiples sesiones de cardio
 }
 
-// Utilidades del catálogo
+// Utilidades del catálogo (Búsqueda O(1) mediante Map indexado)
+const CATALOG_BY_ID = new Map<string, CatalogExercise>(
+  EXERCISE_CATALOG.map((ex) => [ex.id, ex]),
+);
+
 export function getCatalogExerciseById(id: string): CatalogExercise | undefined {
-  return EXERCISE_CATALOG.find((ex) => ex.id === id);
+  if (!id) return undefined;
+  return CATALOG_BY_ID.get(id);
 }
 
 export function getCatalogExerciseName(id: string, fallbackName?: string): string {

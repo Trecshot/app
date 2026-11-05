@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -66,10 +66,17 @@ export default function PlanificacionScreen() {
 
   const currentSessionIndex = useSessionStore((s) => s.currentSessionIndex);
   const currentBlock = useSessionStore((s) => s.currentBlock);
+  const commentDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    const timers = commentDebounceRef.current;
+    return () => {
+      Object.values(timers).forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
 
   const syncWithSessionStore = useCallback(async () => {
     await useSessionStore.getState().initBlock();
-    await useSessionStore.getState().loadPlanningContext();
   }, []);
 
   const loadMesocycleData = useCallback(async () => {
@@ -215,9 +222,15 @@ export default function PlanificacionScreen() {
     setWeeks((prev) =>
       prev.map((w) => (w.id === weekId ? { ...w, week_comment: text } : w)),
     );
-    void MesocycleRepository.updateWeekComment(weekId, text).then(() =>
-      useSessionStore.getState().loadPlanningContext(),
-    );
+    if (commentDebounceRef.current[weekId]) {
+      clearTimeout(commentDebounceRef.current[weekId]);
+    }
+    commentDebounceRef.current[weekId] = setTimeout(() => {
+      delete commentDebounceRef.current[weekId];
+      void MesocycleRepository.updateWeekComment(weekId, text).then(() =>
+        useSessionStore.getState().loadPlanningContext(),
+      );
+    }, 350);
   };
 
   const handleSaveSessionConfig = async (

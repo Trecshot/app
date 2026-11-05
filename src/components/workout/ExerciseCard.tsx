@@ -29,9 +29,10 @@ import {
 } from '../../store/useWorkoutStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import {
-  EXERCISE_CATALOG,
   MUSCLE_GROUPS,
   MuscleGroup,
+  filterExercisesByGroup,
+  getCatalogExerciseById,
   getCatalogExerciseName,
 } from '../../../types';
 
@@ -120,12 +121,10 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
   const hasGroupSelected = Boolean(exercise.selectedMuscleGroup);
 
   // Filtro Dinámico O(n) dependiente del grupo muscular seleccionado
-  const filteredExercises = useMemo(() => {
-    if (!exercise.selectedMuscleGroup) return [];
-    return EXERCISE_CATALOG.filter(
-      (ex) => ex.muscleGroup === exercise.selectedMuscleGroup,
-    );
-  }, [exercise.selectedMuscleGroup]);
+  const filteredExercises = useMemo(
+    () => filterExercisesByGroup(exercise.selectedMuscleGroup ?? null),
+    [exercise.selectedMuscleGroup],
+  );
 
   // Reordenamiento dinámico (Opción A): grupos del enfoque primero, luego el resto
   const groupSheetData = useMemo(() => {
@@ -168,7 +167,7 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
   };
 
   const handleSelectExercise = (item: { id: string }) => {
-    const found = EXERCISE_CATALOG.find((ex) => ex.id === item.id);
+    const found = getCatalogExerciseById(item.id);
     if (found) {
       selectExercise(exercise.id, found);
     }

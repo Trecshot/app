@@ -12,9 +12,6 @@ import {
 
 let dbInstance: SQLite.SQLiteDatabase | null = null;
 let dbInitialization: Promise<SQLite.SQLiteDatabase> | null = null;
-let prRuleV7Applied = false;
-let cardioFkFixed = false;
-let mesocycleTablesReady = false;
 let catalogSyncedCount = 0;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
@@ -22,18 +19,6 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
     if (catalogSyncedCount !== EXERCISE_CATALOG.length) {
       catalogSyncedCount = EXERCISE_CATALOG.length;
       await seedExerciseCatalog(dbInstance).catch(() => undefined);
-    }
-    if (!cardioFkFixed) {
-      cardioFkFixed = true;
-      await migrateFixCardioBlocksForeignKey(dbInstance).catch(() => undefined);
-    }
-    if (!prRuleV7Applied) {
-      prRuleV7Applied = true;
-      await migrateNumericTypesAndPRColumns(dbInstance).catch(() => undefined);
-    }
-    if (!mesocycleTablesReady) {
-      mesocycleTablesReady = true;
-      await ensureMesocycleTables(dbInstance).catch(() => undefined);
     }
     return dbInstance;
   }
@@ -166,9 +151,6 @@ async function initializeDatabase(): Promise<SQLite.SQLiteDatabase> {
     await migrateTrainingBlocksSessionCounter(db);
     await migrateNumericTypesAndPRColumns(db);
     await ensureMesocycleTables(db);
-    cardioFkFixed = true;
-    prRuleV7Applied = true;
-    mesocycleTablesReady = true;
     catalogSyncedCount = EXERCISE_CATALOG.length;
     dbInstance = db;
     return db;
@@ -875,7 +857,7 @@ export async function saveWorkout(
         const endIso = addLocalDays(start, TRAINING_BLOCK_DAYS).toISOString();
         await db.runAsync(
           'INSERT INTO training_blocks (id, type, start_date, end_date, sessions_count, target_sessions) VALUES (?, ?, ?, ?, 0, ?);',
-          [newBlockId, newBlockType, startIso, endIso, TRAINING_BLOCK_SESSIONS],
+          [newBlockId, newBlockType, startIso, endIso, targetSessions],
         );
         block = {
           id: newBlockId,
@@ -883,7 +865,7 @@ export async function saveWorkout(
           startDate: startIso,
           endDate: endIso,
           sessionCount: 0,
-          targetSessions: TRAINING_BLOCK_SESSIONS,
+          targetSessions,
         };
       } else if ((block.sessionCount ?? 0) === 0) {
         // Sesión 1/7: fijar la fecha exacta de inicio del bloque a la fecha de la primera sesión
@@ -1447,9 +1429,9 @@ export async function deleteWorkoutById(id: string): Promise<void> {
   // Normalizamos el ID por si llega como texto (UUID) o número
   const numericId = /^\d+$/.test(id) ? Number(id) : -1;
 
-  // Obtenemos el ID numérico interno de la tabla workouts
-  const workout = await db.getFirstAsync<{ id: number }>(
-    'SELECT id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
+  // Obtenemos el ID numérico interno y el block_id de la tabla workouts
+  const workout = await db.getFirstAsync<{ id: number; block_id: string | null }>(
+    'SELECT id, block_id FROM workouts WHERE client_id = ? OR id = ? LIMIT 1;',
     [String(id), numericId],
   );
 
@@ -1458,11 +1440,22 @@ export async function deleteWorkoutById(id: string): Promise<void> {
     return;
   }
 
-  // Transacción atómica blindada para evitar bloqueos de llaves foráneas
+  // Transacción atómica blindada para evitar bloqueos de llaves foráneas y mantener PRs/contadores al día
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM exercise_logs WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM cardio_logs WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM cardio_blocks WHERE workout_id = ?;', [workout.id]);
     await db.runAsync('DELETE FROM workouts WHERE id = ?;', [workout.id]);
+
+    if (workout.block_id) {
+      await db.runAsync(
+        `UPDATE training_blocks
+         SET sessions_count = (SELECT COUNT(*) FROM workouts WHERE block_id = ?)
+         WHERE id = ?;`,
+        [workout.block_id, workout.block_id],
+      );
+    }
+
+    await recalculateAllHistoricalPRs(db);
   });
 }

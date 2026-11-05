@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { Crypto } from '../../src/utils/uuid';
 import { router, useFocusEffect } from 'expo-router';
@@ -32,6 +31,7 @@ import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import type { CardioBlock, Ejercicio, MuscleGroup, SesionEntrenamiento, WorkoutExerciseBlock } from '../../types';
 import { MUSCLE_GROUPS, getCatalogExerciseName } from '../../types';
 import { exportDatabaseBackup } from '../../src/utils/databaseBackup';
+import { toStrictIntegerReps, toStrictRealWeight } from '../../src/utils/prEngine';
 
 export default function ActiveWorkoutScreen() {
   const sessionFocus = useWorkoutStore((s) => s.sessionFocus);
@@ -66,7 +66,6 @@ export default function ActiveWorkoutScreen() {
   // Función atómica encargada de leer la pre-carga desde SQLite y sincronizar con la sesión activa
   const hydrateCurrentSessionData = useCallback(async () => {
     await useSessionStore.getState().initBlock();
-    await useSessionStore.getState().loadPlanningContext();
 
     const sessionState = useSessionStore.getState();
     const workoutState = useWorkoutStore.getState();
@@ -82,16 +81,12 @@ export default function ActiveWorkoutScreen() {
     }
   }, []);
 
-  // useFocusEffect corre CADA VEZ que el usuario vuelve a la pestaña Entrenar
+  // useFocusEffect corre en el montaje inicial y cada vez que el usuario vuelve a la pestaña Entrenar
   useFocusEffect(
     useCallback(() => {
       void hydrateCurrentSessionData();
     }, [hydrateCurrentSessionData]),
   );
-
-  useEffect(() => {
-    void hydrateCurrentSessionData();
-  }, [hydrateCurrentSessionData]);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);
@@ -131,7 +126,6 @@ export default function ActiveWorkoutScreen() {
         pendingPlanCompletedRef.current = false;
         await clearCurrentPlanning();
         await useSessionStore.getState().initBlock();
-        await useSessionStore.getState().loadPlanningContext();
         router.navigate('/planificacion');
       },
       onCancel: async () => {
@@ -139,7 +133,6 @@ export default function ActiveWorkoutScreen() {
         pendingPlanCompletedRef.current = false;
         await clearCurrentPlanning();
         await useSessionStore.getState().initBlock();
-        await useSessionStore.getState().loadPlanningContext();
         if (postNavigationRoute && postNavigationRoute !== '/') {
           router.navigate(postNavigationRoute as any);
         } else {
@@ -215,11 +208,7 @@ export default function ActiveWorkoutScreen() {
       .map((ex) => ({
         ...ex,
         sets: ex.sets
-          .filter((s) => {
-            const reps = parseInt(String(s.reps), 10) || 0;
-            const weight = String(s.weight) === '' ? 0 : parseFloat(String(s.weight));
-            return reps > 0 && Number.isFinite(weight) && weight >= 0;
-          })
+          .filter((s) => toStrictIntegerReps(s.reps) > 0 && toStrictRealWeight(s.weight) >= 0)
           .map((s) => ({
             ...s,
             setType: s.setType ?? 'NORMAL',
@@ -298,15 +287,11 @@ export default function ActiveWorkoutScreen() {
             ex.name,
           );
           const validSets = ex.sets
-            .filter((s) => {
-              const reps = parseInt(String(s.reps), 10) || 0;
-              const weight = String(s.weight) === '' ? 0 : parseFloat(String(s.weight));
-              return reps > 0 && Number.isFinite(weight) && weight >= 0;
-            })
+            .filter((s) => toStrictIntegerReps(s.reps) > 0 && toStrictRealWeight(s.weight) >= 0)
             .map((s) => ({
               id: s.id,
-              reps: parseInt(String(s.reps), 10) || 0,
-              pesoKg: Math.max(0, parseFloat(String(s.weight)) || 0),
+              reps: toStrictIntegerReps(s.reps),
+              pesoKg: toStrictRealWeight(s.weight),
               setType: s.setType ?? 'NORMAL',
             }));
 
@@ -356,7 +341,6 @@ export default function ActiveWorkoutScreen() {
         }
       } else {
         await useSessionStore.getState().initBlock();
-        await useSessionStore.getState().loadPlanningContext();
       }
     } catch (error) {
       console.error('Error al guardar sesión:', error);
@@ -380,23 +364,18 @@ export default function ActiveWorkoutScreen() {
   };
 
   const handleOpenSettings = () => {
-    Alert.alert(
-      'Ajustes y Respaldo',
-      '¿Deseas exportar una copia de seguridad de tu base de datos SQLite?',
-      [
-        {
-          text: 'Exportar Copia BD',
-          onPress: () => {
-            void exportDatabaseBackup();
-          },
-        },
-        {
-          text: 'Cancelar',
-          style: 'cancel',
-        },
-      ],
-      { cancelable: true },
-    );
+    setConfirmModalConfig({
+      visible: true,
+      title: 'Ajustes y Respaldo',
+      message: '¿Deseas exportar una copia de seguridad de tu base de datos SQLite?',
+      confirmText: 'Exportar Copia BD',
+      cancelText: 'Cancelar',
+      confirmDestructive: false,
+      onConfirm: () => {
+        setConfirmModalConfig(null);
+        void exportDatabaseBackup();
+      },
+    });
   };
 
   return (
@@ -786,34 +765,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: SPACING.md,
-  },
-  exercisesHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  restQuickBtn: {
-    backgroundColor: COLORS.timerSurface,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  restQuickBtnText: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  floatingRestBar: {
-    position: 'absolute',
-    left: SPACING.md,
-    right: SPACING.md,
-    bottom: SPACING.md,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
   },
   outlineButton: {
     borderWidth: 1,

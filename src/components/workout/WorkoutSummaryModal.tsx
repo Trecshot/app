@@ -6,8 +6,8 @@ import {
   Text,
   Pressable,
   StyleSheet,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Trophy,
   Clock,
@@ -18,6 +18,7 @@ import {
 import { useWorkoutStore } from '../../store/useWorkoutStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { COLORS, SPACING } from '../../theme';
+import { toStrictIntegerReps, toStrictRealWeight } from '../../utils/prEngine';
 import type { CardioBlock, MuscleGroup, WorkoutExerciseBlock, WorkoutSet } from '../../../types';
 
 interface Props {
@@ -88,24 +89,10 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
     list.forEach((ex: WorkoutExerciseBlock) => {
       ex?.sets?.forEach((set: WorkoutSet) => {
         totalSets++;
-        const rawReps =
-          typeof set?.reps === 'number'
-            ? set.reps
-            : parseFloat(String(set?.reps ?? '').trim());
-        const rawWeight =
-          set?.weight === '' || set?.weight === undefined || set?.weight === null
-            ? 0
-            : typeof set.weight === 'number'
-            ? set.weight
-            : parseFloat(String(set.weight).trim());
+        const rawReps = toStrictIntegerReps(set?.reps);
+        const rawWeight = toStrictRealWeight(set?.weight);
 
-        const isValidSet =
-          Number.isFinite(rawReps) &&
-          rawReps > 0 &&
-          Number.isFinite(rawWeight) &&
-          rawWeight >= 0;
-
-        if (isValidSet) {
+        if (rawReps > 0 && rawWeight >= 0) {
           completedSets++;
           volume += rawReps * rawWeight;
         }
@@ -113,17 +100,9 @@ export const WorkoutSummaryModal: React.FC<Props> = ({
     });
 
     const validExerciseCount = list.filter((ex) =>
-      ex?.sets?.some((s) => {
-        const r =
-          typeof s?.reps === 'number' ? s.reps : parseFloat(String(s?.reps ?? '').trim());
-        const w =
-          s?.weight === '' || s?.weight === undefined || s?.weight === null
-            ? 0
-            : typeof s.weight === 'number'
-            ? s.weight
-            : parseFloat(String(s.weight).trim());
-        return Number.isFinite(r) && r > 0 && Number.isFinite(w) && w >= 0;
-      }),
+      ex?.sets?.some(
+        (s) => toStrictIntegerReps(s?.reps) > 0 && toStrictRealWeight(s?.weight) >= 0,
+      ),
     ).length;
 
     return {

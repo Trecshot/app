@@ -18,6 +18,7 @@ import {
   MUSCLE_GROUPS,
   MuscleGroup,
   CatalogExercise,
+  getCatalogExerciseById,
   getCatalogExerciseName,
 } from '../../../types';
 import { sanitizeTacticalNote } from '../../utils/textSanitizer';
@@ -401,10 +402,8 @@ function SessionConfigForm({
                   ) : (
                     <View style={styles.presetsList}>
                       {presetExerciseIds.map((exId, idx) => {
-                        const name = getCatalogExerciseName(exId, exId);
-                        const catalogObj = EXERCISE_CATALOG.find(
-                          (e) => e.id === exId,
-                        );
+                        const catalogObj = getCatalogExerciseById(exId);
+                        const name = catalogObj?.name ?? getCatalogExerciseName(exId, exId);
                         return (
                           <View
                             key={`${exId}_${idx}`}
