@@ -86,11 +86,12 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 380,
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceElevated,
     borderRadius: 20,
     padding: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
+    borderTopColor: COLORS.borderStrong,
   },
   title: {
     color: COLORS.textPrimary,

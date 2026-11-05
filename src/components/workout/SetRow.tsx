@@ -9,7 +9,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Minus, Check, Flame, Zap, Shield, ChevronDown, TrendingUp } from 'lucide-react-native';
-import { COLORS, SPACING, GLOBAL_STYLES, theme } from '../../theme';
+import { COLORS, SPACING, GLOBAL_STYLES, LINE_HEIGHT, TOUCH_TARGET, theme } from '../../theme';
 import { useWorkoutStore } from '../../store/useWorkoutStore';
 import { useWorkoutTimer } from '../../hooks/useWorkoutTimer';
 import { TimerDisplay } from './TimerDisplay';
@@ -276,15 +276,25 @@ const SetRowComponent = ({
         <TouchableOpacity
           onPress={handleToggleComplete}
           style={[styles.actionButton, isCompleted && styles.actionButtonActive]}
+          hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: isCompleted }}
         >
-          <Check size={20} color={isCompleted ? COLORS.textInverted : COLORS.textSecondary} />
+          <Check
+            size={20}
+            strokeWidth={isCompleted ? 2.5 : 2}
+            color={isCompleted ? COLORS.primary : COLORS.textMuted}
+          />
         </TouchableOpacity>
 
         {/* Botón de Eliminar */}
-        <TouchableOpacity onPress={handleDelete} style={styles.actionButton}>
-          <Minus size={20} color={COLORS.danger} />
+        <TouchableOpacity
+          onPress={handleDelete}
+          style={styles.actionButton}
+          hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
+          accessibilityLabel={`Eliminar serie ${setNumber}`}
+        >
+          <Minus size={20} strokeWidth={2} color={COLORS.danger} />
         </TouchableOpacity>
 
         {/* Modal compacto para seleccionar el tipo de serie */}
@@ -367,14 +377,14 @@ export const SetRow = memo(SetRowComponent);
 
 const styles = StyleSheet.create({
   setBlockWrapper: {
-    marginVertical: 2,
+    marginVertical: 3,
   },
   rowContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: SPACING.sm,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: SPACING.xs,
   },
   rowDropSetBorder: {
@@ -390,7 +400,7 @@ const styles = StyleSheet.create({
     borderLeftColor: COLORS.approachAccent,
   },
   rowCompleted: {
-    backgroundColor: 'rgba(163, 230, 53, 0.12)',
+    backgroundColor: 'rgba(163, 230, 53, 0.07)',
   },
   rowCompletedTyped: {
     opacity: 0.95,
@@ -400,9 +410,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: 82,
-    height: 36,
+    height: TOUCH_TARGET,
     paddingHorizontal: 6,
-    borderRadius: 8,
+    borderRadius: 10,
     backgroundColor: COLORS.surfaceHighlight,
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -432,29 +442,36 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flex: 1,
+    minWidth: 60,
     paddingHorizontal: SPACING.xs,
   },
   inputBox: {
-    paddingVertical: 8,
-    borderRadius: 8,
+    minHeight: TOUCH_TARGET,
+    borderRadius: 10,
+    fontSize: 17,
   },
   inputCompleted: {
     backgroundColor: 'transparent',
     borderColor: 'transparent',
-    color: COLORS.primary,
+    color: COLORS.textPrimary,
     fontWeight: '800',
   },
   actionButton: {
-    padding: SPACING.xs,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginLeft: SPACING.xs,
-    borderRadius: 8,
+    borderRadius: 10,
   },
   actionButtonActive: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.primaryBorder,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: SPACING.md,
@@ -462,21 +479,24 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 360,
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: SPACING.md,
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: 20,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopColor: COLORS.borderStrong,
   },
   modalTitle: {
     fontSize: 17,
     fontWeight: '800',
     color: COLORS.textPrimary,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   modalSubtitle: {
     fontSize: 12,
     color: COLORS.textSecondary,
     marginBottom: SPACING.md,
-    lineHeight: 17,
+    lineHeight: LINE_HEIGHT.xs + 1,
   },
   segmentedList: {
     gap: SPACING.sm,
@@ -484,7 +504,9 @@ const styles = StyleSheet.create({
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.sm,
+    minHeight: 56,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.md - 4,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,

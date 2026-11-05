@@ -241,7 +241,8 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
             >
               <CheckCheck
                 size={18}
-                color={allSetsCompleted ? COLORS.textInverted : COLORS.primary}
+                strokeWidth={2}
+                color={allSetsCompleted ? COLORS.primary : COLORS.textSecondary}
               />
             </Pressable>
           )}
@@ -335,7 +336,7 @@ const ExerciseCardComponent = ({ exerciseIndex, exercise }: ExerciseCardProps) =
             <Text style={[styles.columnLabel, { width: 86, textAlign: 'center' }]}>SERIE / TIPO</Text>
             <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>REPS</Text>
             <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>PESO (KG)</Text>
-            <View style={{ width: 70 }} />
+            <View style={{ width: 88 }} />
           </View>
 
           {/* 4. Filas de Series */}
@@ -438,9 +439,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   chevronButton: {
-    padding: 6,
+    padding: 7,
     backgroundColor: COLORS.surfaceHighlight,
-    borderRadius: 14,
+    borderRadius: 10,
   },
   collapsedSummary: {
     marginTop: 6,
@@ -482,18 +483,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   deleteButton: {
-    padding: 6,
+    padding: 7,
     backgroundColor: COLORS.surfaceHighlight,
-    borderRadius: 14,
+    borderRadius: 10,
   },
   completeAllButton: {
-    padding: 6,
-    backgroundColor: 'rgba(163, 230, 53, 0.12)',
-    borderRadius: 14,
-    marginRight: SPACING.sm,
+    padding: 7,
+    backgroundColor: COLORS.surfaceHighlight,
+    borderRadius: 10,
+    marginRight: SPACING.xs,
   },
   completeAllButtonDone: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.primaryBorder,
+    padding: 6,
   },
   buttonPressed: {
     opacity: 0.7,

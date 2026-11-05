@@ -13,7 +13,7 @@ import {
 import { Crypto } from '../../src/utils/uuid';
 import { router, useFocusEffect } from 'expo-router';
 import { Settings, Maximize, RotateCcw, Sparkles } from 'lucide-react-native';
-import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
+import { COLORS, GLOBAL_STYLES, LINE_HEIGHT, SPACING, TOUCH_TARGET } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import { SessionStopwatchDisplay } from '../../src/components/workout/TimerDisplay';
 import { sanitizeTacticalNote } from '../../src/utils/textSanitizer';
@@ -410,10 +410,14 @@ export default function ActiveWorkoutScreen() {
         {activeWeek && (
           <View style={styles.planningBannerCard}>
             <View style={styles.planningHeaderRow}>
-              <Text style={styles.planningWeekEyebrow}>
-                SEMANA {activeWeek.week_number} • {activeWeek.type} (Sesión{' '}
-                {currentSessionIndex}/{activeWeek.total_planned_sessions})
-              </Text>
+              <View style={styles.planningTitleGroup}>
+                <Text style={styles.planningWeekEyebrow}>
+                  SEMANA {activeWeek.week_number} • {activeWeek.type}
+                </Text>
+                <Text style={styles.planningSessionMeta}>
+                  Sesión {currentSessionIndex}/{activeWeek.total_planned_sessions}
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={() => router.navigate('/planificacion')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -424,15 +428,18 @@ export default function ActiveWorkoutScreen() {
 
             {activeWeek.week_comment ? (
               <Text style={styles.planningObjectiveText}>
-                Objetivo: {activeWeek.week_comment}
+                <Text style={styles.planningObjectiveLabel}>Objetivo: </Text>
+                {activeWeek.week_comment}
               </Text>
             ) : null}
 
             {activeSessionNote ? (
               <View style={styles.planningSessionNoteBox}>
+                <Text style={styles.planningInfoLabel}>
+                  NOTA TÁCTICA · SESIÓN {currentSessionIndex}/{activeWeek.total_planned_sessions}
+                </Text>
                 <Text style={styles.planningSessionNoteText}>
-                  Nota Táctica (Sesión {currentSessionIndex}/
-                  {activeWeek.total_planned_sessions}): {sanitizeTacticalNote(activeSessionNote)}
+                  {sanitizeTacticalNote(activeSessionNote)}
                 </Text>
               </View>
             ) : null}
@@ -440,9 +447,11 @@ export default function ActiveWorkoutScreen() {
             {(activeSessionTargetMuscles.length > 0 ||
               activeSessionPresetExerciseIds.length > 0) && (
               <View style={styles.planningPreloadBox}>
-                <Sparkles size={13} color={COLORS.primary} />
+                <View style={styles.planningPreloadLabelRow}>
+                  <Sparkles size={12} color={COLORS.primary} />
+                  <Text style={styles.planningInfoLabel}>PRE-CARGA</Text>
+                </View>
                 <Text style={styles.planningPreloadText}>
-                  Pre-carga:{' '}
                   {activeSessionTargetMuscles.length > 0
                     ? `Enfoque (${activeSessionTargetMuscles.join(', ')})`
                     : ''}
@@ -719,9 +728,14 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   iconButton: {
-    padding: 8,
+    width: TOUCH_TARGET,
+    height: TOUCH_TARGET,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: COLORS.surfaceHighlight,
-    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
   },
   timerCard: {
     backgroundColor: COLORS.timerSurface,
@@ -789,7 +803,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   focusContainer: {
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.xl,
   },
   focusHeaderRow: {
     flexDirection: 'row',
@@ -814,8 +828,8 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xs,
   },
   focusChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: COLORS.surfaceHighlight,
     borderWidth: 1,
@@ -845,15 +859,24 @@ const styles = StyleSheet.create({
   planningHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+  },
+  planningTitleGroup: {
+    flex: 1,
+    marginRight: SPACING.sm,
   },
   planningWeekEyebrow: {
-    color: COLORS.primary,
-    fontSize: 12,
+    color: COLORS.textPrimary,
+    fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.6,
     textTransform: 'uppercase',
-    flex: 1,
+  },
+  planningSessionMeta: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
   },
   planningEditLink: {
     color: COLORS.textSecondary,
@@ -861,43 +884,59 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   planningObjectiveText: {
-    color: COLORS.textPrimary,
+    color: COLORS.textBody,
     fontSize: 14,
-    fontWeight: '600',
-    marginTop: 6,
-    lineHeight: 20,
+    fontWeight: '500',
+    marginTop: SPACING.sm,
+    lineHeight: LINE_HEIGHT.base,
+  },
+  planningObjectiveLabel: {
+    color: COLORS.textPrimary,
+    fontWeight: '700',
   },
   planningSessionNoteBox: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: COLORS.primarySoft,
     borderLeftWidth: 3,
     borderLeftColor: COLORS.primary,
-    padding: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    marginTop: 8,
+    marginTop: SPACING.sm + 2,
+  },
+  planningInfoLabel: {
+    color: COLORS.primary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
   planningSessionNoteText: {
-    color: COLORS.primary,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 19,
+    color: COLORS.textBody,
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: LINE_HEIGHT.base,
+    marginTop: 4,
+    textAlign: 'left',
   },
   planningPreloadBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primaryBorder,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: SPACING.sm,
+  },
+  planningPreloadLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(163, 230, 53, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(163, 230, 53, 0.25)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginTop: 8,
   },
   planningPreloadText: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: '700',
-    flex: 1,
+    color: COLORS.textBody,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: LINE_HEIGHT.sm,
+    marginTop: 4,
   },
   notesSection: {
     marginTop: SPACING.lg,

@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
   },
   backdrop: {
     position: 'absolute',
@@ -154,9 +154,11 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   sheetContainer: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceElevated,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderStrong,
     maxHeight: SCREEN_HEIGHT * 0.75,
     minHeight: SCREEN_HEIGHT * 0.35,
     paddingHorizontal: SPACING.md,
@@ -174,7 +176,7 @@ const styles = StyleSheet.create({
   grabber: {
     width: 44,
     height: 5,
-    backgroundColor: COLORS.border,
+    backgroundColor: COLORS.borderStrong,
     borderRadius: 3,
   },
   header: {
@@ -197,8 +199,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   closeButton: {
-    padding: SPACING.xs,
-    backgroundColor: COLORS.surfaceHighlight,
+    padding: SPACING.sm,
+    backgroundColor: COLORS.border,
     borderRadius: 20,
   },
   listContent: {
@@ -214,10 +216,10 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   itemRowSelected: {
-    backgroundColor: 'rgba(163, 230, 53, 0.18)',
+    backgroundColor: COLORS.primarySoft,
   },
   itemRowPressed: {
-    backgroundColor: COLORS.surfaceHighlight,
+    backgroundColor: COLORS.border,
   },
   itemTitle: {
     fontSize: 16,
@@ -234,7 +236,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   badgeContainer: {
-    backgroundColor: COLORS.surfaceHighlight,
+    backgroundColor: COLORS.border,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,

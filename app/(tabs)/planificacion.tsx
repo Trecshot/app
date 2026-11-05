@@ -25,7 +25,7 @@ import {
   Dumbbell,
   ChevronRight,
 } from 'lucide-react-native';
-import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
+import { COLORS, GLOBAL_STYLES, LINE_HEIGHT, SPACING } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import {
   SessionConfigModal,
@@ -871,8 +871,8 @@ const styles = StyleSheet.create({
   },
   descriptionText: {
     color: COLORS.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 14,
+    lineHeight: LINE_HEIGHT.base,
     marginBottom: SPACING.lg,
   },
   loadingBox: {
@@ -906,7 +906,7 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: 13,
     color: COLORS.textSecondary,
-    lineHeight: 19,
+    lineHeight: 21,
     textAlign: 'center',
     marginBottom: SPACING.lg,
   },
@@ -1003,14 +1003,15 @@ const styles = StyleSheet.create({
   },
   activeSessionSubtext: {
     fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.primaryDark,
-    marginTop: 1,
+    fontWeight: '500',
+    color: COLORS.textSecondary,
+    marginTop: 2,
   },
   inactiveSubtext: {
     fontSize: 12,
+    fontWeight: '500',
     color: COLORS.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
   weekRightActions: {
     flexDirection: 'row',
@@ -1036,8 +1037,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surfaceHighlight,
     borderWidth: 1,
     borderColor: COLORS.border,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 999,
   },
   activateWeekBtnText: {
@@ -1046,7 +1047,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   deleteWeekBtn: {
-    padding: 6,
+    padding: 9,
     borderRadius: 8,
     backgroundColor: COLORS.surfaceHighlight,
   },
@@ -1091,7 +1092,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   fieldLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
     color: COLORS.textSecondary,
@@ -1102,15 +1103,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   quotaChip: {
+    minWidth: 36,
+    alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 8,
     borderRadius: 8,
     backgroundColor: COLORS.surfaceHighlight,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
   quotaChipSelected: {
-    backgroundColor: 'rgba(163, 230, 53, 0.16)',
+    backgroundColor: COLORS.primarySoft,
     borderColor: COLORS.primary,
   },
   quotaChipText: {
@@ -1131,10 +1134,11 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    color: COLORS.textPrimary,
-    fontSize: 13,
-    minHeight: 42,
+    paddingVertical: 12,
+    color: COLORS.textBody,
+    fontSize: 14,
+    lineHeight: LINE_HEIGHT.base,
+    minHeight: 48,
   },
   sessionNotesToggleBtn: {
     flexDirection: 'row',
@@ -1145,7 +1149,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(143, 155, 122, 0.28)',
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 12,
   },
   sessionNotesToggleLeft: {
     flexDirection: 'row',
@@ -1170,18 +1174,18 @@ const styles = StyleSheet.create({
   },
   sessionNotesList: {
     marginTop: SPACING.sm,
-    gap: SPACING.xs,
+    gap: SPACING.sm,
   },
   sessionCardItem: {
     backgroundColor: COLORS.surfaceHighlight,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 10,
-    padding: 11,
+    borderRadius: 12,
+    padding: SPACING.md - 4,
   },
   sessionCardItemCurrent: {
-    borderColor: COLORS.primaryDark,
-    backgroundColor: 'rgba(193, 225, 79, 0.12)',
+    borderColor: COLORS.primaryBorder,
+    backgroundColor: COLORS.primarySoft,
   },
   sessionCardHeader: {
     flexDirection: 'row',
@@ -1222,13 +1226,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   sessionCardBody: {
-    marginTop: 4,
+    marginTop: 6,
   },
   sessionPreviewNote: {
-    fontSize: 12,
-    color: COLORS.textPrimary,
-    lineHeight: 16,
-    marginBottom: 6,
+    fontSize: 13,
+    color: COLORS.textBody,
+    lineHeight: LINE_HEIGHT.sm,
+    marginBottom: 8,
   },
   sessionPreviewBadgesRow: {
     flexDirection: 'row',

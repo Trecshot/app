@@ -292,6 +292,9 @@ const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: COLORS.surface,
     borderRadius: 24,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderTopColor: COLORS.borderStrong,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },

@@ -21,6 +21,30 @@ export const COLORS = {
   approachIndicator: 'rgba(56, 189, 248, 0.16)', // Celeste traslúcido para fila Aproximación
   approachAccent: '#38BDF8', // Celeste sólido para serie Aproximación
   normalSet: 'transparent', // Base transparente para serie normal
+
+  // --- Tokens de refinamiento estético (fatiga visual, jerarquía y profundidad) ---
+  surfaceElevated: '#1A1A1A', // Modales / bottom sheets: un escalón más claro que las tarjetas base
+  borderStrong: '#333333', // Borde superior definido para modales y elementos elevados
+  textBody: '#E5E5E5', // Gris muy claro para cuerpos de texto largos (menos agresivo que blanco puro)
+  textMuted: '#737373', // Gris tenue para metadatos terciarios
+  primarySoft: 'rgba(163, 230, 53, 0.10)', // Fondo verde de baja opacidad para cajas informativas
+  primaryBorder: 'rgba(163, 230, 53, 0.28)', // Borde verde sutil para estados completados
+  warmupSoft: 'rgba(234, 179, 8, 0.10)', // Fondo amarillo de baja opacidad para avisos
+  inputSurface: '#262626', // Fondo interactivo para inputs de reps/peso (bg-neutral-800)
+};
+
+/** Tamaño mínimo de área táctil (44x44 pt lógicos, guía HIG / Material). */
+export const TOUCH_TARGET = 44;
+
+/** Grosor de trazo estándar para iconografía lucide en toda la app. */
+export const ICON_STROKE = 2;
+
+/** Alturas de línea relajadas para bloques descriptivos (≈ leading-relaxed). */
+export const LINE_HEIGHT = {
+  xs: 17, // fontSize 11-12
+  sm: 20, // fontSize 13
+  base: 22, // fontSize 14-15
+  lg: 24, // fontSize 16
 };
 
 export const SPACING = {
@@ -61,13 +85,14 @@ export const GLOBAL_STYLES = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   input: {
-    backgroundColor: COLORS.surfaceHighlight,
+    backgroundColor: COLORS.inputSurface,
     borderColor: COLORS.border,
     borderWidth: 1,
     color: COLORS.textPrimary,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.sm,
+    paddingVertical: 12,
+    minHeight: 44,
     fontSize: 16,
     textAlign: 'center',
     fontWeight: '600',

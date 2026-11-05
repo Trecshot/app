@@ -279,6 +279,29 @@ Modales Customizados AMOLED y Microcopy UX:
     de peso y volumen) y "Semana de Descarga" (Reducción de intensidad).
   * Selector de tipo en Planificación: Botones minimalistas "CARGA" y "DESCARGA" sin emojis.
 
+Refinamiento Estetico v2 (Fatiga Visual, Jerarquia, Touch Targets y Profundidad):
+- Nuevos tokens en `src/theme.ts`:
+  * `surfaceElevated` #1A1A1A (modales/bottom sheets un escalon mas claros que las tarjetas #121212),
+    `borderStrong` #333333 (borde superior definido en modales), `inputSurface` #262626 (inputs de reps/peso).
+  * `textBody` #E5E5E5 (cuerpos de texto largos), `textMuted` #737373 (iconos inactivos / metadatos terciarios).
+  * `primarySoft` rgba(163,230,53,0.10) y `primaryBorder` rgba(163,230,53,0.28): verde de baja opacidad
+    para cajas informativas y estados completados, reservando el verde lima solido para CTAs.
+  * Constantes `TOUCH_TARGET` (44pt), `ICON_STROKE` (2) y `LINE_HEIGHT` (xs 17 / sm 20 / base 22 / lg 24).
+- Cajas "Nota Tactica" y "Pre-carga" (Entrenar): el verde saturado queda limitado al borde izquierdo y a una
+  etiqueta corta en mayusculas; el cuerpo usa `textBody` con interlineado relajado y alineacion izquierda.
+- Banner de planificacion: titulo "SEMANA N - TIPO" en blanco bold; "Sesion x/y" como metadato gris medium.
+- Filas de series (SetRow): inputs con altura minima 44pt, `minWidth` 60, fondo #262626 y fuente 17pt;
+  selector de tipo a 44pt; botones check/eliminar de 40x40 con hitSlop (area efectiva >= 44pt).
+  El check inactivo es gris tenue y el completado usa fondo `primarySoft` + borde `primaryBorder` (sin relleno
+  lima solido), para no competir con "Comenzar" / "Finalizar entrenamiento", que se mantienen intactos (AAA).
+- ExerciseCard: el boton "completar todas" pasa a gris neutro hasta completarse; botones de cabecera
+  uniformes (radio 10, padding 7).
+- Planificacion: descripciones y notas a 13-14pt con `LINE_HEIGHT`, subtitulos de semana en gris medium,
+  chips de cuota y botones "Activar"/borrar con mayor area tactil, separacion `gap` 8 entre tarjetas de sesion.
+- Modales (ConfirmModal, NewBlockModal, ExerciseBottomSheet, selector Tipo de Serie) con fondo
+  `surfaceElevated`, borde superior `borderStrong` y overlay mas oscuro (0.65-0.7) para mayor foco.
+- Espaciado: margen inferior de 32pt tras el bloque de Enfoque para separar "estado global" de la lista de
+  ejercicios; botones de icono de la cabecera a 44x44.
 ================================================================================
 9. COMPILACION NATIVA Y CONFIGURACION ANDROID/EAS (app.json & package.json)
 ================================================================================

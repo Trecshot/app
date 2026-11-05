@@ -148,11 +148,12 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   card: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.surfaceElevated,
     borderRadius: 20,
     padding: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.border,
+    borderTopColor: COLORS.borderStrong,
   },
   eyebrow: {
     color: COLORS.primary,

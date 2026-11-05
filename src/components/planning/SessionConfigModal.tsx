@@ -499,6 +499,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     borderWidth: 1,
     borderColor: '#27272A',
+    borderTopColor: COLORS.borderStrong,
     borderBottomWidth: 0,
     overflow: 'hidden',
   },
