@@ -442,8 +442,14 @@ de registros, se implemento una estrategia dual de persistencia y respaldo:
      Ejecuta `PRAGMA wal_checkpoint(FULL);` sobre la instancia activa de SQLite,
      forzando la sincronizacion de todos los datos en memoria o en el archivo `-wal`
      directamente en el fichero principal `gym_tracker.db`.
-   - Localizacion segura de la base de datos:
-     Inspecciona `db.databasePath` y las rutas de documentos de `expo-file-system/legacy`.
+   - Serializacion nativa directa y bypass de sandbox (Expo Go / Android):
+     En Expo Go y entornos Android con almacenamiento aislado (Scoped Storage),
+     ExponentFileSystem.copyAsync rechaza leer directamente las rutas privadas de SQLite
+     arrojando error de lectura (Location '...gym_tracker.db' isn't readable). Para solucionarlo,
+     se prioriza el volcado binario directo en memoria mediante db.serializeAsync('main')
+     de expo-sqlite, escribiendo el buffer en Paths.cache (expo-file-system), donde
+     expo-sharing cuenta con permisos nativos absolutos. Cuenta ademas con fallback por Base64
+     y busqueda tradicional en db.databasePath.
    - Generacion de copia fechada en cache:
      Genera un archivo `gym_tracker_backup_YYYY-MM-DD_HH-mm.db` en el directorio
      temporal de la app.
