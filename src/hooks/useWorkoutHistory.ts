@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 import { WorkoutRepository } from '../db/repositories/WorkoutRepository';
 import { formatBlockStartDate, useSessionStore } from '../store/useSessionStore';
+import { useWorkoutStore } from '../store/useWorkoutStore';
 import type { SesionEntrenamiento, TrainingBlock, WeeklySummary } from '../../types';
 
 export interface WorkoutBlockSection {
@@ -88,8 +89,21 @@ export function useWorkoutHistory(): UseWorkoutHistoryResult {
       setHistory((items) => items.filter((item) => item.id !== workoutId));
       setWeeklySummary(await WorkoutRepository.getWeeklySummary());
 
-      // Forzamos la re-evaluación del bloque activo para que el contador (ej. 3/7) baje de inmediato
+      // Forzamos la re-evaluación del bloque activo y contexto de planificación
       await useSessionStore.getState().initBlock();
+      await useSessionStore.getState().loadPlanningContext();
+
+      // Sincronizar el estado de la sesión activa en useWorkoutStore
+      const sessionState = useSessionStore.getState();
+      if (!sessionState.isActive) {
+        useWorkoutStore.getState().resetWorkout();
+        if (sessionState.activeWeek) {
+          useWorkoutStore.getState().hydratePreloadedSession(
+            sessionState.activeSessionTargetMuscles,
+            sessionState.activeSessionPresetExerciseIds,
+          );
+        }
+      }
     } catch (error) {
       console.error('Error al eliminar:', error);
       Alert.alert('No se pudo eliminar', 'Inténtalo de nuevo.');

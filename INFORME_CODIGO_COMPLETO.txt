@@ -45,19 +45,36 @@ El enrutador base utiliza Expo Router dentro del directorio `app/`:
   * Barra estilizada con compensacion dinamica de area segura (`insets.bottom`).
 
 - app/(tabs)/index.tsx (Pantalla Viva de Entrenamiento):
+  * Soporte de Teclado y Scroll Reactivo: Envoltorio con `KeyboardAvoidingView`
+    (behavior condicional para iOS y offset) junto a `ScrollView` con
+    `keyboardShouldPersistTaps="handled"` y `paddingBottom` ampliado (120dp), permitiendo
+    escribir notas de contexto y editar series sin que el teclado virtual tape la vista.
   * Cabecera con indicador de bloque activo (`BlockIndicator`).
-  * Modulo de Planificacion Condicional: Si existe una semana activa configurada,
-    despliega el objetivo semanal y la nota tactica exacta de la sesion en curso
-    (ej. Sesion 2/7) antes de iniciar los levantamientos.
+  * Modulo de Planificacion Condicional e Hidratacion Atomica (`hydrateCurrentSessionData`):
+    - Sincronizacion reactiva mediante `useFocusEffect` y tras eliminaciones en Historial.
+    - Si la sesion no esta en curso y el lienzo esta limpio (`!isActive && exercises.length === 0`),
+      inyecta de inmediato en `useWorkoutStore` (`hydratePreloadedSession`) los ejercicios pre-cargados
+      y los grupos musculares de enfoque de la sesion ordinal activa (ej. Sesion 1/4), eliminando bloqueos
+      residuales de memoria o punteros desincronizados al restaurar entrenamientos borrados.
+    - Despliega el objetivo semanal y la nota tactica exacta de la sesion en curso antes de iniciar.
   * Encadenamiento libre de semanas: Sin banners ni sugerencias intrusivas de descarga
     al cumplir las 7/7 sesiones; el usuario puede continuar encadenando semanas de sobrecarga
     de manera 100% fluida y sin fricciones.
   * Tarjeta de Cronometro general de la sesion activa (`SessionStopwatchDisplay`).
   * Selector multi-chip de enfoque muscular de la sesion (`SessionFocus`).
-  * Listado dinamico de ejercicios con tarjetas independientes (`ExerciseCard`).
+  * Listado dinamico de ejercicios con tarjetas colapsables independientes (`ExerciseCard`):
+    - Soporte de transicion animada suave mediante `LayoutAnimation` para expandir y colapsar.
+    - Estado expandido por defecto con tabla completa de series, inputs numericos y botones.
+    - Estado colapsado ultra-compacto (~56-64 dp) con cabecera interactiva (ordinal, grupo, nombre,
+      chevron interactivo '>' y boton de check/eliminar) mas subtitulo de resumen informativo (ej.
+      "3 series completadas • 100 kg max"), agilizando la sesion y evitando scroll continuo.
   * Filas de series con selector de tipo de serie (`SetRow`).
   * Seccion de Cardio adicional con medicion de minutos, velocidad, km o saltos.
-  * Notas de contexto de la sesion (fatiga, sensaciones, descanso previo).
+  * Notas de contexto de la sesion (fatiga, sensaciones, descanso previo):
+    TextInput multilinea blindado con `multiline={true}`, `blurOnSubmit={false}`,
+    `returnKeyType="default"` y `textAlignVertical="top"`. Permite saltos de linea fluidos
+    con la tecla Enter sin cerrar el teclado ni reiniciar el estado del campo, reservando el
+    reseteo unicamente al boton manual "Limpiar".
   * Modal de finalizacion inmediata (`WorkoutSummaryModal`) con computo de PRs.
 
 - app/(tabs)/history.tsx (Historial y Auditoria):
@@ -71,6 +88,10 @@ El enrutador base utiliza Expo Router dentro del directorio `app/`:
   * Asignacion de cuota de sesiones por bloque (4, 5, 6 o 7 sesiones).
   * Campo de texto libre para el Objetivo/Comentario Semanal a nivel bloque.
   * Desplegable de Notas Tacticas por Sesion Ordinal (Sesion 1/N a N/N).
+  * Modal de Configuracion Tactica y Pre-carga (SessionConfigModal.tsx):
+    Arquitectura de Renderizado Condicional Alterno para seleccion de ejercicios. Alterna limpiamente
+    entre la Vista de Configuracion Principal y la Vista de Catalogo a Pantalla Completa (FlatList con
+    buscador y filtros por grupo muscular), eliminando cualquier superposicion visual o mezcla de capas en Android.
   * Plantillas rapidas (ej. "5 Carga + 1 Descarga" o "3 Carga + 1 Descarga").
   * Opcion de desactivar la planificacion para volver a modo 100% manual libre.
   * Finalizacion de Mesociclo (Opcion A): Al terminar la ultima sesion de la ultima semana,
@@ -275,6 +296,10 @@ Archivo: app.json
     - `resizeMode`: "contain" (Mantiene la geometría central en cualquier proporción de pantalla).
     - `imageWidth`: 200.
     - `dark`: Variante oscura con fondo "#000000".
+- Manejo del Teclado en Android (`softwareKeyboardLayoutMode: "resize"`):
+  * Configurado en `app.json` bajo `android` para inyectar `android:windowSoftInputMode="adjustResize"`
+    en el AndroidManifest nativo. Fuerza a que la ventana de la aplicación se encoja al alto visible
+    restante sobre el teclado sin tapar el ScrollView, inputs ni botones de acción.
 - Permisos nativos declarados para Android 12+ (API 31+):
   * `SCHEDULE_EXACT_ALARM`: Permite programar alarmas exactas inter-series.
   * `USE_EXACT_ALARM`: Permite la ejecucion puntual sin suspension del kernel.
@@ -333,6 +358,7 @@ Resolucion de Dependencias Peer y Actualizaciones:
   │   ├── useSessionStore.ts          -> Cronometro general, bloques, puente con mesociclo y pre-carga predictiva
   │   └── useWorkoutStore.ts          -> Borrador de rutina activa (ejercicios y series)
   ├── utils/
+  │   ├── databaseBackup.ts           -> Volcado seguro WAL, copia temporal y exportacion con expo-sharing
   │   ├── prEngine.ts                 -> Reglas algoritmicas de PR Absoluto (1-3 reps, unicidad, NORMAL)
   │   ├── restNotifications.ts        -> Disparo nativo de alarmas con AlarmManager
   │   ├── textSanitizer.ts            -> Sanitizador de formulas y comandos LaTeX a texto plano limpio
@@ -373,7 +399,47 @@ muscular y los ejercicios fijos para cada sesion ordinal (ej. Sesion 1/7 o 1/4):
    - 100% opcional: Si la sesion no tiene pre-carga, la app inicia vacia como siempre.
 
 ================================================================================
-12. ESTADO ACTUAL DE CALIDAD Y CODIGO
+12. ACTUALIZACIONES IN-PLACE Y RESPALDO SQLite (PERSISTENCIA Y SEGURIDAD)
+================================================================================
+Para garantizar que cualquier compilacion o actualizacion en Android preserve
+completamente intactos los datos del usuario (/data/data/) y evitar perdidas
+de registros, se implemento una estrategia dual de persistencia y respaldo:
+
+1. Configuracion de Actualizacion en Contexto (In-Place Upgrade):
+   - Identificador de paquete inmutable: `android.package: "com.trecshot.gymtracker"`
+     en `app.json`.
+   - Control estricto de version: `android.versionCode: 2` configurado en `app.json`.
+   - Automatizacion de compilaciones en la nube (`eas.json`):
+     Propiedad `"autoIncrement": true` activada en los perfiles `preview` y
+     `production`. Cada compilacion incrementa monotonicamente el `versionCode`,
+     impidiendo que Android rechace la actualizacion con `INSTALL_FAILED_VERSION_DOWNGRADE`.
+
+2. Modulo de Respaldo y Exportacion (`src/utils/databaseBackup.ts`):
+   - Vaciado preventivo de transacciones WAL:
+     Ejecuta `PRAGMA wal_checkpoint(FULL);` sobre la instancia activa de SQLite,
+     forzando la sincronizacion de todos los datos en memoria o en el archivo `-wal`
+     directamente en el fichero principal `gym_tracker.db`.
+   - Localizacion segura de la base de datos:
+     Inspecciona `db.databasePath` y las rutas de documentos de `expo-file-system/legacy`.
+   - Generacion de copia fechada en cache:
+     Genera un archivo `gym_tracker_backup_YYYY-MM-DD_HH-mm.db` en el directorio
+     temporal de la app.
+   - Hoja de compartir del sistema operativo (`expo-sharing`):
+     Invoca `Sharing.shareAsync` con tipo MIME `application/x-sqlite3`, permitiendo
+     al usuario respaldar su base de datos completa en Google Drive, WhatsApp,
+     Telegram, correo o guardarla en su explorador de archivos local.
+
+3. Integracion en Interfaz Visual (Minima y No Intrusiva):
+   - Pildora en Historial (`app/(tabs)/history.tsx`):
+     Ubicada en la cabecera superior en la misma linea del titulo "Historial",
+     con diseno minimalista oscuro, icono `Download`, feedback visual de carga
+     y etiqueta "Copia BD" sin consumir espacio vertical de la lista.
+   - Acceso Rapido en Entrenar (`app/(tabs)/index.tsx`):
+     Conectado al boton de configuracion (`Settings`) existente en la esquina
+     superior derecha con dialogo contextual para exportar en cualquier momento.
+
+================================================================================
+13. ESTADO ACTUAL DE CALIDAD Y CODIGO
 ================================================================================
 - TypeScript: `npx tsc --noEmit` -> 0 errores.
 - Expo Linter: `npx expo lint` -> 0 advertencias, 0 errores.

@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   TextInput,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import {
@@ -35,7 +37,6 @@ import {
   useSessionStore,
 } from '../../src/store/useSessionStore';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
-import { sanitizeTacticalNote } from '../../src/utils/textSanitizer';
 import type { MesocycleWeek, PlannedSessionConfig, PlannedWeekType } from '../../types';
 
 const SESSION_QUOTA_OPTIONS = [4, 5, 6, 7];
@@ -211,11 +212,10 @@ export default function PlanificacionScreen() {
   };
 
   const handleChangeWeekComment = (weekId: number, text: string) => {
-    const clean = sanitizeTacticalNote(text);
     setWeeks((prev) =>
-      prev.map((w) => (w.id === weekId ? { ...w, week_comment: clean } : w)),
+      prev.map((w) => (w.id === weekId ? { ...w, week_comment: text } : w)),
     );
-    void MesocycleRepository.updateWeekComment(weekId, clean).then(() =>
+    void MesocycleRepository.updateWeekComment(weekId, text).then(() =>
       useSessionStore.getState().loadPlanningContext(),
     );
   };
@@ -281,10 +281,15 @@ export default function PlanificacionScreen() {
   };
 
   return (
-    <View style={GLOBAL_STYLES.container}>
+    <KeyboardAvoidingView
+      style={GLOBAL_STYLES.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+    >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         {/* Cabecera Principal */}
         <View style={styles.headerRow}>
@@ -535,7 +540,10 @@ export default function PlanificacionScreen() {
                       }
                       placeholder="Ej. Acumulación de volumen en banca y sentadilla; mantener RIR 2"
                       placeholderTextColor={COLORS.textSecondary}
-                      multiline
+                      multiline={true}
+                      blurOnSubmit={false}
+                      returnKeyType="default"
+                      textAlignVertical="top"
                     />
                   </View>
 
@@ -801,15 +809,16 @@ export default function PlanificacionScreen() {
           onCancel={() => setConfirmModalConfig(null)}
         />
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   scrollContent: {
+    flexGrow: 1,
     padding: SPACING.md,
     paddingTop: 50,
-    paddingBottom: 110,
+    paddingBottom: 120, // Margen extra inferior para que nunca quede al ras sobre el teclado ni la barra de navegación
   },
   headerRow: {
     flexDirection: 'row',

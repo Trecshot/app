@@ -1,10 +1,11 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, SectionList, TouchableOpacity } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { Dumbbell, ChevronDown } from 'lucide-react-native';
+import { Dumbbell, ChevronDown, Download } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, SPACING } from '../../src/theme';
 import { WorkoutHistoryCard, type WorkoutHistoryCardProps } from '../../src/components/workout/WorkoutHistoryCard';
 import { useWorkoutHistory, type WorkoutBlockSection } from '../../src/hooks/useWorkoutHistory';
+import { exportDatabaseBackup } from '../../src/utils/databaseBackup';
 import type { SesionEntrenamiento } from '../../types';
 
 // Mapear un registro de SQLite a las props de la tarjeta del historial
@@ -94,6 +95,17 @@ function toCardProps(session: SesionEntrenamiento): WorkoutHistoryCardProps & { 
 export default function HistoryScreen() {
   const { sections, loading, refreshHistory, deleteWorkout } = useWorkoutHistory();
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportBackup = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      await exportDatabaseBackup();
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const toggleSection = (key: string) => {
     setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -148,8 +160,28 @@ export default function HistoryScreen() {
     <View style={GLOBAL_STYLES.container}>
       {/* Header Superior */}
       <View style={styles.topHeader}>
-        <Text style={styles.headerSubtitle}>TUS REGISTROS</Text>
-        <Text style={styles.headerTitle}>Historial</Text>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.headerSubtitle}>TUS REGISTROS</Text>
+            <Text style={styles.headerTitle}>Historial</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.backupPill}
+            onPress={handleExportBackup}
+            disabled={isExporting}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {isExporting ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <>
+                <Download size={14} color={COLORS.primary} />
+                <Text style={styles.backupPillText}>Copia BD</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Lista agrupada por bloques de 7 días */}
@@ -184,6 +216,28 @@ const styles = StyleSheet.create({
     paddingTop: 50,
     paddingBottom: SPACING.md,
     backgroundColor: COLORS.background,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+  },
+  backupPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    marginBottom: 4,
+  },
+  backupPillText: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   headerSubtitle: {
     color: COLORS.textSecondary,

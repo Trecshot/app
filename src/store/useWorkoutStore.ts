@@ -77,6 +77,9 @@ export interface WorkoutStore {
 
   // Reiniciar
   resetWorkout: () => void;
+
+  // Pre-carga e Hidratación de Sesión
+  hydratePreloadedSession: (targetMuscles: MuscleGroup[], presetExerciseIds: string[]) => void;
 }
 
 // Generador de IDs únicos criptográficamente seguros
@@ -323,6 +326,47 @@ export const useWorkoutStore = create<WorkoutStore>()(
           cardio: [],
           notes: '',
         }),
+
+      hydratePreloadedSession: (targetMuscles, presetExerciseIds) => {
+        const state = get();
+        if (state.exercises.length > 0) return;
+
+        const newFocus =
+          targetMuscles && targetMuscles.length > 0
+            ? targetMuscles
+            : state.sessionFocus;
+
+        const newExercises: WorkoutExerciseBlock[] = (presetExerciseIds || []).map(
+          (presetId) => {
+            const catalogExercise = getCatalogExerciseById(presetId);
+            const resolvedGroup =
+              catalogExercise?.muscleGroup ??
+              (newFocus.length > 0 ? newFocus[0] : MUSCLE_GROUPS[0]);
+
+            return {
+              id: generateId(),
+              catalogExerciseId: catalogExercise?.id ?? presetId,
+              selectedMuscleGroup: resolvedGroup,
+              name: catalogExercise?.name,
+              sets: [
+                {
+                  id: generateId(),
+                  reps: '',
+                  weight: '',
+                  isCompleted: false,
+                  setType: 'NORMAL',
+                  restSeconds: state.defaultRestSeconds || 120,
+                },
+              ],
+            };
+          },
+        );
+
+        set({
+          sessionFocus: newFocus,
+          exercises: newExercises,
+        });
+      },
     }),
     {
       name: 'workout-exercises-storage',

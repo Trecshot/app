@@ -7,6 +7,9 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from 'react-native';
 import { Crypto } from '../../src/utils/uuid';
 import { router, useFocusEffect } from 'expo-router';
@@ -28,10 +31,10 @@ import { BlockIndicator } from '../../src/components/workout/BlockIndicator';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import type { CardioBlock, Ejercicio, MuscleGroup, SesionEntrenamiento, WorkoutExerciseBlock } from '../../types';
 import { MUSCLE_GROUPS, getCatalogExerciseName } from '../../types';
+import { exportDatabaseBackup } from '../../src/utils/databaseBackup';
 
 export default function ActiveWorkoutScreen() {
   const sessionFocus = useWorkoutStore((s) => s.sessionFocus);
-  const setSessionFocus = useWorkoutStore((s) => s.setSessionFocus);
   const toggleSessionFocus = useWorkoutStore((s) => s.toggleSessionFocus);
   const exercises = useWorkoutStore((s) => s.exercises);
   const addExercise = useWorkoutStore((s) => s.addExercise);
@@ -59,65 +62,36 @@ export default function ActiveWorkoutScreen() {
   const activeSessionPresetExerciseIds = useSessionStore(
     (s) => s.activeSessionPresetExerciseIds,
   );
-  const loadPlanningContext = useSessionStore((s) => s.loadPlanningContext);
-  const lastPreloadedKeyRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    void loadPlanningContext();
-  }, [loadPlanningContext]);
+  // Función atómica encargada de leer la pre-carga desde SQLite y sincronizar con la sesión activa
+  const hydrateCurrentSessionData = useCallback(async () => {
+    await useSessionStore.getState().initBlock();
+    await useSessionStore.getState().loadPlanningContext();
 
-  // Reevaluar el bloque actual y la planificación cada vez que la pantalla gana el foco
+    const sessionState = useSessionStore.getState();
+    const workoutState = useWorkoutStore.getState();
+
+    // Solo hidratar si la sesión NO está en curso y la rutina está limpia
+    if (!sessionState.isActive && workoutState.exercises.length === 0) {
+      if (sessionState.activeWeek) {
+        workoutState.hydratePreloadedSession(
+          sessionState.activeSessionTargetMuscles,
+          sessionState.activeSessionPresetExerciseIds,
+        );
+      }
+    }
+  }, []);
+
+  // useFocusEffect corre CADA VEZ que el usuario vuelve a la pestaña Entrenar
   useFocusEffect(
     useCallback(() => {
-      void (async () => {
-        await useSessionStore.getState().initBlock();
-        await useSessionStore.getState().loadPlanningContext();
-      })();
-    }, []),
+      void hydrateCurrentSessionData();
+    }, [hydrateCurrentSessionData]),
   );
 
-  // 3.2 Carga Predictiva de Sesión:
-  // Al entrar a una sesión planificada limpia (!isActive y exercises vacíos),
-  // se precargan los grupos musculares del enfoque y se montan las tarjetas de ejercicios pre-cargados.
   useEffect(() => {
-    if (!activeWeek) return;
-    const sessionKey = `${activeWeek.id}_${currentSessionIndex}`;
-
-    // Si ya procesamos la pre-carga para esta sesión, o la sesión ya está en curso, no sobreescribir
-    if (lastPreloadedKeyRef.current === sessionKey) return;
-    if (isActive) return;
-
-    const hasTargetMuscles =
-      activeSessionTargetMuscles && activeSessionTargetMuscles.length > 0;
-    const hasPresetExercises =
-      activeSessionPresetExerciseIds &&
-      activeSessionPresetExerciseIds.length > 0;
-
-    if (!hasTargetMuscles && !hasPresetExercises) return;
-
-    // Solo pre-cargar si la rutina actual está limpia (sin ejercicios añadidos)
-    if (exercises.length === 0) {
-      if (hasTargetMuscles && sessionFocus.length === 0) {
-        setSessionFocus(activeSessionTargetMuscles);
-      }
-      if (hasPresetExercises) {
-        activeSessionPresetExerciseIds.forEach((presetId) => {
-          addExercise(presetId);
-        });
-      }
-      lastPreloadedKeyRef.current = sessionKey;
-    }
-  }, [
-    activeWeek,
-    currentSessionIndex,
-    isActive,
-    exercises.length,
-    sessionFocus.length,
-    activeSessionTargetMuscles,
-    activeSessionPresetExerciseIds,
-    setSessionFocus,
-    addExercise,
-  ]);
+    void hydrateCurrentSessionData();
+  }, [hydrateCurrentSessionData]);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);
@@ -405,9 +379,37 @@ export default function ActiveWorkoutScreen() {
     resetWorkout();
   };
 
+  const handleOpenSettings = () => {
+    Alert.alert(
+      'Ajustes y Respaldo',
+      '¿Deseas exportar una copia de seguridad de tu base de datos SQLite?',
+      [
+        {
+          text: 'Exportar Copia BD',
+          onPress: () => {
+            void exportDatabaseBackup();
+          },
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true },
+    );
+  };
+
   return (
-    <View style={GLOBAL_STYLES.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+    <KeyboardAvoidingView
+      style={GLOBAL_STYLES.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header Superior */}
         <View style={styles.topHeader}>
           <View>
@@ -419,7 +421,7 @@ export default function ActiveWorkoutScreen() {
             <TouchableOpacity style={styles.iconButton}>
               <Maximize size={20} color={COLORS.textPrimary} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity style={styles.iconButton} onPress={handleOpenSettings} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Settings size={20} color={COLORS.textPrimary} />
             </TouchableOpacity>
           </View>
@@ -633,11 +635,13 @@ export default function ActiveWorkoutScreen() {
           <TextInput
             style={styles.notesInput}
             value={notes}
-            onChangeText={(text) => setNotes(sanitizeTacticalNote(text))}
+            onChangeText={(text) => setNotes(text)}
             placeholder="Ej. Sensación de fatiga alta, buen bombeo, falta de sueño..."
             placeholderTextColor={COLORS.textSecondary}
-            multiline
-            numberOfLines={3}
+            multiline={true}
+            blurOnSubmit={false}
+            returnKeyType="default"
+            numberOfLines={4}
             textAlignVertical="top"
           />
         </View>
@@ -702,15 +706,16 @@ export default function ActiveWorkoutScreen() {
           onCancel={confirmModalConfig.onCancel ?? (() => setConfirmModalConfig(null))}
         />
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   scrollContent: {
+    flexGrow: 1,
     padding: SPACING.md,
     paddingTop: 50,
-    paddingBottom: 100, // Vital para que los botones inferiores no queden detrás de la barra inferior
+    paddingBottom: 120, // Margen extra inferior para que nunca quede al ras sobre el teclado ni la barra de navegación
   },
   topHeader: {
     flexDirection: 'row',

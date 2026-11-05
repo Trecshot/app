@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Pressable,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { X, Plus, Trash2, Dumbbell, Sparkles } from 'lucide-react-native';
@@ -56,7 +57,7 @@ function SessionConfigForm({
   const [presetExerciseIds, setPresetExerciseIds] = useState<string[]>(
     initialPresetExerciseIds || [],
   );
-  const [isExercisePickerOpen, setIsExercisePickerOpen] = useState(false);
+  const [isSelectingCatalog, setIsSelectingCatalog] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCatalogGroup, setSelectedCatalogGroup] = useState<
     MuscleGroup | 'TODOS'
@@ -80,7 +81,7 @@ function SessionConfigForm({
       if (prev.includes(exerciseId)) return prev;
       return [...prev, exerciseId];
     });
-    setIsExercisePickerOpen(false);
+    setIsSelectingCatalog(false);
     setSearchQuery('');
   };
 
@@ -125,18 +126,29 @@ function SessionConfigForm({
             <View style={styles.grabber} />
           </View>
 
-          {/* Cabecera */}
+          {/* Cabecera Alterna */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={styles.eyebrow}>
-                SEMANA {weekNumber} • SESIÓN ORDINAL
+                {isSelectingCatalog
+                  ? 'CATÁLOGO DE EJERCICIOS'
+                  : `SEMANA ${weekNumber} • SESIÓN ORDINAL`}
               </Text>
               <Text style={styles.title}>
-                Configurar Sesión {sessionOrdinal}/{totalPlannedSessions}
+                {isSelectingCatalog
+                  ? 'Seleccionar del Catálogo'
+                  : `Configurar Sesión ${sessionOrdinal}/${totalPlannedSessions}`}
               </Text>
             </View>
             <TouchableOpacity
-              onPress={onClose}
+              onPress={() => {
+                if (isSelectingCatalog) {
+                  setIsSelectingCatalog(false);
+                  setSearchQuery('');
+                } else {
+                  onClose();
+                }
+              }}
               style={styles.closeBtn}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
@@ -144,283 +156,310 @@ function SessionConfigForm({
             </TouchableOpacity>
           </View>
 
-          <ScrollView
-            style={styles.scrollBody}
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Sección 1: Nota Táctica */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionTitle}>NOTA TÁCTICA</Text>
-                <Text style={styles.optionalTag}>Opcional</Text>
-              </View>
-              <TextInput
-                style={styles.noteInput}
-                value={note}
-                onChangeText={setNote}
-                placeholder={`Directriz táctica para la Sesión ${sessionOrdinal}/${totalPlannedSessions} (ej. Hack 80 kg x 8 y Prensa 160 kg)`}
-                placeholderTextColor={COLORS.textSecondary}
-                multiline
-              />
-            </View>
-
-            <View style={styles.divider} />
-
-            {/* Sección 2: Pre-carga Opcional (Enfoque y Ejercicios) */}
-            <View style={styles.section}>
-              <View style={styles.sectionHeaderRow}>
-                <View
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+          {isSelectingCatalog ? (
+            /* VISTA 1: SELECTOR DE CATÁLOGO (Ocupa todo el modal en pantalla completa) */
+            <View style={styles.fullCatalogContainer}>
+              {/* Filtro horizontal por grupo muscular */}
+              <View style={styles.catalogFiltersSection}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.catalogFilterScroll}
                 >
-                  <Sparkles size={16} color={COLORS.primary} />
-                  <Text style={styles.sectionTitle}>PRE-CARGA OPCIONAL</Text>
-                </View>
-                <Text style={styles.optionalTag}>Automática</Text>
-              </View>
-              <Text style={styles.sectionDesc}>
-                Al entrar a la pantalla Entrenar en esta sesión, se seleccionarán
-                estos enfoques y se precargarán estos ejercicios listos para
-                registrar.
-              </Text>
-
-              {/* Sub-sección: Enfoque Muscular */}
-              <Text style={styles.subFieldLabel}>
-                ENFOQUE (GRUPOS MUSCULARES)
-              </Text>
-              <View style={styles.chipsWrap}>
-                {MUSCLE_GROUPS.map((group) => {
-                  const isSelected = targetMuscles.includes(group);
-                  return (
-                    <TouchableOpacity
-                      key={group}
-                      style={[
-                        styles.muscleChip,
-                        isSelected && styles.muscleChipActive,
-                      ]}
-                      onPress={() => toggleMuscleFocus(group)}
-                      activeOpacity={0.75}
-                    >
-                      <Text
-                        style={[
-                          styles.muscleChipText,
-                          isSelected && styles.muscleChipTextActive,
-                        ]}
-                      >
-                        {group} {isSelected ? '✓' : '+'}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Sub-sección: Ejercicios Pre-cargados */}
-              <View style={styles.exercisesHeaderRow}>
-                <Text style={styles.subFieldLabel}>
-                  EJERCICIOS PRE-CARGADOS ({presetExerciseIds.length})
-                </Text>
-                {!isExercisePickerOpen && (
                   <TouchableOpacity
-                    style={styles.addExerciseMiniBtn}
-                    onPress={() => setIsExercisePickerOpen(true)}
-                    activeOpacity={0.8}
+                    style={[
+                      styles.catalogFilterChip,
+                      selectedCatalogGroup === 'TODOS' &&
+                        styles.catalogFilterChipActive,
+                    ]}
+                    onPress={() => setSelectedCatalogGroup('TODOS')}
                   >
-                    <Plus size={14} color={COLORS.primary} />
-                    <Text style={styles.addExerciseMiniBtnText}>
-                      Añadir Ejercicio
+                    <Text
+                      style={[
+                        styles.catalogFilterChipText,
+                        selectedCatalogGroup === 'TODOS' &&
+                          styles.catalogFilterChipTextActive,
+                      ]}
+                    >
+                      Todos
                     </Text>
                   </TouchableOpacity>
-                )}
+                  {MUSCLE_GROUPS.map((g) => {
+                    const isSelected = selectedCatalogGroup === g;
+                    const isFocused = targetMuscles.includes(g);
+                    return (
+                      <TouchableOpacity
+                        key={g}
+                        style={[
+                          styles.catalogFilterChip,
+                          isSelected && styles.catalogFilterChipActive,
+                        ]}
+                        onPress={() => setSelectedCatalogGroup(g)}
+                      >
+                        <Text
+                          style={[
+                            styles.catalogFilterChipText,
+                            isSelected && styles.catalogFilterChipTextActive,
+                          ]}
+                        >
+                          {g} {isFocused ? '★' : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
               </View>
 
-              {/* Selector desplegable de ejercicios del catálogo */}
-              {isExercisePickerOpen && (
-                <View style={styles.catalogPickerBox}>
-                  <View style={styles.catalogPickerHeader}>
-                    <Text style={styles.catalogPickerTitle}>
-                      Seleccionar del Catálogo
-                    </Text>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setIsExercisePickerOpen(false);
-                        setSearchQuery('');
-                      }}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    >
-                      <X size={16} color={COLORS.textSecondary} />
-                    </TouchableOpacity>
-                  </View>
+              {/* Input de Búsqueda de ejercicios */}
+              <TextInput
+                style={styles.catalogSearchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Buscar ejercicio por nombre o grupo..."
+                placeholderTextColor={COLORS.textSecondary}
+              />
 
-                  {/* Filtro por grupo muscular */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.catalogFilterScroll}
-                  >
+              {/* Lista cómoda a pantalla completa con FlatList */}
+              <FlatList
+                data={filteredCatalog}
+                keyExtractor={(item) => item.id}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.catalogFlatListContent}
+                renderItem={({ item }) => {
+                  const isAlreadyPreset = presetExerciseIds.includes(item.id);
+                  return (
                     <TouchableOpacity
                       style={[
-                        styles.catalogFilterChip,
-                        selectedCatalogGroup === 'TODOS' &&
-                          styles.catalogFilterChipActive,
+                        styles.catalogItemRow,
+                        isAlreadyPreset && styles.catalogItemRowDisabled,
                       ]}
-                      onPress={() => setSelectedCatalogGroup('TODOS')}
+                      onPress={() => handleAddPresetExercise(item.id)}
+                      disabled={isAlreadyPreset}
+                      activeOpacity={0.7}
                     >
-                      <Text
-                        style={[
-                          styles.catalogFilterChipText,
-                          selectedCatalogGroup === 'TODOS' &&
-                            styles.catalogFilterChipTextActive,
-                        ]}
-                      >
-                        Todos
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.catalogItemName,
+                            isAlreadyPreset && styles.catalogItemNameDisabled,
+                          ]}
+                        >
+                          {item.name}
+                        </Text>
+                        <Text style={styles.catalogItemMuscle}>
+                          {item.muscleGroup}
+                        </Text>
+                      </View>
+                      {isAlreadyPreset ? (
+                        <View style={styles.alreadyAddedPill}>
+                          <Text style={styles.alreadyAddedBadge}>Añadido</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.addExerciseActionBadge}>
+                          <Plus size={16} color={COLORS.primary} />
+                        </View>
+                      )}
                     </TouchableOpacity>
-                    {MUSCLE_GROUPS.map((g) => {
-                      const isSelected = selectedCatalogGroup === g;
-                      const isFocused = targetMuscles.includes(g);
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={styles.catalogEmptyContainer}>
+                    <Text style={styles.catalogEmptyText}>
+                      No se encontraron ejercicios en esta categoría.
+                    </Text>
+                  </View>
+                }
+              />
+
+              {/* Barra inferior para volver a la configuración */}
+              <View style={styles.catalogBottomBar}>
+                <TouchableOpacity
+                  style={styles.backToSessionBtn}
+                  onPress={() => {
+                    setIsSelectingCatalog(false);
+                    setSearchQuery('');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.backToSessionBtnText}>
+                    Volver a la Configuración ({presetExerciseIds.length} pre-cargados)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            /* VISTA 2: NOTA TÁCTICA Y LISTA DE PRE-CARGADOS */
+            <>
+              <ScrollView
+                style={styles.scrollBody}
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Sección 1: Nota Táctica */}
+                <View style={styles.section}>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={styles.sectionTitle}>NOTA TÁCTICA</Text>
+                    <Text style={styles.optionalTag}>Opcional</Text>
+                  </View>
+                  <TextInput
+                    style={styles.noteInput}
+                    value={note}
+                    onChangeText={setNote}
+                    placeholder={`Directriz táctica para la Sesión ${sessionOrdinal}/${totalPlannedSessions} (ej. Hack 80 kg x 8 y Prensa 160 kg)`}
+                    placeholderTextColor={COLORS.textSecondary}
+                    multiline={true}
+                    blurOnSubmit={false}
+                    returnKeyType="default"
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                <View style={styles.divider} />
+
+                {/* Sección 2: Pre-carga Opcional (Enfoque y Ejercicios) */}
+                <View style={styles.section}>
+                  <View style={styles.sectionHeaderRow}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Sparkles size={16} color={COLORS.primary} />
+                      <Text style={styles.sectionTitle}>PRE-CARGA OPCIONAL</Text>
+                    </View>
+                    <Text style={styles.optionalTag}>Automática</Text>
+                  </View>
+                  <Text style={styles.sectionDesc}>
+                    Al entrar a la pantalla Entrenar en esta sesión, se
+                    seleccionarán estos enfoques y se precargarán estos
+                    ejercicios listos para registrar.
+                  </Text>
+
+                  {/* Sub-sección: Enfoque Muscular */}
+                  <Text style={styles.subFieldLabel}>
+                    ENFOQUE (GRUPOS MUSCULARES)
+                  </Text>
+                  <View style={styles.chipsWrap}>
+                    {MUSCLE_GROUPS.map((group) => {
+                      const isSelected = targetMuscles.includes(group);
                       return (
                         <TouchableOpacity
-                          key={g}
+                          key={group}
                           style={[
-                            styles.catalogFilterChip,
-                            isSelected && styles.catalogFilterChipActive,
+                            styles.muscleChip,
+                            isSelected && styles.muscleChipActive,
                           ]}
-                          onPress={() => setSelectedCatalogGroup(g)}
+                          onPress={() => toggleMuscleFocus(group)}
+                          activeOpacity={0.75}
                         >
                           <Text
                             style={[
-                              styles.catalogFilterChipText,
-                              isSelected && styles.catalogFilterChipTextActive,
+                              styles.muscleChipText,
+                              isSelected && styles.muscleChipTextActive,
                             ]}
                           >
-                            {g} {isFocused ? '★' : ''}
+                            {group} {isSelected ? '✓' : '+'}
                           </Text>
                         </TouchableOpacity>
                       );
                     })}
-                  </ScrollView>
+                  </View>
 
-                  {/* Input de Búsqueda */}
-                  <TextInput
-                    style={styles.catalogSearchInput}
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    placeholder="Buscar ejercicio..."
-                    placeholderTextColor={COLORS.textSecondary}
-                  />
-
-                  {/* Lista con scroll dentro del picker */}
-                  <View style={styles.catalogItemsList}>
-                    {filteredCatalog.length === 0 ? (
-                      <Text style={styles.catalogEmptyText}>
-                        No se encontraron ejercicios
+                  {/* Sub-sección: Ejercicios Pre-cargados */}
+                  <View style={styles.exercisesHeaderRow}>
+                    <Text style={styles.subFieldLabel}>
+                      EJERCICIOS PRE-CARGADOS ({presetExerciseIds.length})
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.addExerciseMiniBtn}
+                      onPress={() => setIsSelectingCatalog(true)}
+                      activeOpacity={0.8}
+                    >
+                      <Plus size={14} color={COLORS.primary} />
+                      <Text style={styles.addExerciseMiniBtnText}>
+                        + Añadir Ejercicio
                       </Text>
-                    ) : (
-                      filteredCatalog.slice(0, 15).map((item) => {
-                        const isAlreadyPreset = presetExerciseIds.includes(
-                          item.id,
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Lista de ejercicios pre-cargados actuales */}
+                  {presetExerciseIds.length === 0 ? (
+                    <TouchableOpacity
+                      style={styles.emptyPresetsBox}
+                      onPress={() => setIsSelectingCatalog(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Dumbbell size={18} color={COLORS.textSecondary} />
+                      <Text style={styles.emptyPresetsText}>
+                        Sin ejercicios pre-cargados. Toca &quot;+ Añadir
+                        Ejercicio&quot; para seleccionar del catálogo.
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={styles.presetsList}>
+                      {presetExerciseIds.map((exId, idx) => {
+                        const name = getCatalogExerciseName(exId, exId);
+                        const catalogObj = EXERCISE_CATALOG.find(
+                          (e) => e.id === exId,
                         );
                         return (
-                          <TouchableOpacity
-                            key={item.id}
-                            style={[
-                              styles.catalogItemRow,
-                              isAlreadyPreset && styles.catalogItemRowDisabled,
-                            ]}
-                            onPress={() => handleAddPresetExercise(item.id)}
-                            disabled={isAlreadyPreset}
-                            activeOpacity={0.7}
+                          <View
+                            key={`${exId}_${idx}`}
+                            style={styles.presetItemRow}
                           >
-                            <View style={{ flex: 1 }}>
-                              <Text
-                                style={[
-                                  styles.catalogItemName,
-                                  isAlreadyPreset &&
-                                    styles.catalogItemNameDisabled,
-                                ]}
-                              >
-                                {item.name}
-                              </Text>
-                              <Text style={styles.catalogItemMuscle}>
-                                {item.muscleGroup}
+                            <View style={styles.presetItemNumberBadge}>
+                              <Text style={styles.presetItemNumberText}>
+                                {idx + 1}
                               </Text>
                             </View>
-                            {isAlreadyPreset ? (
-                              <Text style={styles.alreadyAddedBadge}>
-                                Añadido
+                            <View style={{ flex: 1, marginRight: 8 }}>
+                              <Text
+                                style={styles.presetItemName}
+                                numberOfLines={1}
+                              >
+                                {name}
                               </Text>
-                            ) : (
-                              <Plus size={16} color={COLORS.primary} />
-                            )}
-                          </TouchableOpacity>
+                              {catalogObj?.muscleGroup ? (
+                                <Text style={styles.presetItemMuscle}>
+                                  {catalogObj.muscleGroup}
+                                </Text>
+                              ) : null}
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => handleRemovePresetExercise(idx)}
+                              style={styles.presetDeleteBtn}
+                              hitSlop={{
+                                top: 8,
+                                bottom: 8,
+                                left: 8,
+                                right: 8,
+                              }}
+                            >
+                              <Trash2 size={16} color={COLORS.danger} />
+                            </TouchableOpacity>
+                          </View>
                         );
-                      })
-                    )}
-                  </View>
+                      })}
+                    </View>
+                  )}
                 </View>
-              )}
+              </ScrollView>
 
-              {/* Lista de ejercicios pre-cargados actuales */}
-              {presetExerciseIds.length === 0 ? (
-                <View style={styles.emptyPresetsBox}>
-                  <Dumbbell size={18} color={COLORS.textSecondary} />
-                  <Text style={styles.emptyPresetsText}>
-                    Sin ejercicios pre-cargados. (Puedes añadir ejercicios fijos
-                    para no buscarlos en cada sesión).
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.presetsList}>
-                  {presetExerciseIds.map((exId, idx) => {
-                    const name = getCatalogExerciseName(exId, exId);
-                    const catalogObj = EXERCISE_CATALOG.find(
-                      (e) => e.id === exId,
-                    );
-                    return (
-                      <View
-                        key={`${exId}_${idx}`}
-                        style={styles.presetItemRow}
-                      >
-                        <View style={styles.presetItemNumberBadge}>
-                          <Text style={styles.presetItemNumberText}>
-                            {idx + 1}
-                          </Text>
-                        </View>
-                        <View style={{ flex: 1, marginRight: 8 }}>
-                          <Text style={styles.presetItemName} numberOfLines={1}>
-                            {name}
-                          </Text>
-                          {catalogObj?.muscleGroup ? (
-                            <Text style={styles.presetItemMuscle}>
-                              {catalogObj.muscleGroup}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => handleRemovePresetExercise(idx)}
-                          style={styles.presetDeleteBtn}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Trash2 size={16} color={COLORS.danger} />
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
-          </ScrollView>
-
-          {/* Footer con Acciones */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.saveBtn}
-              onPress={handleSave}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.saveBtnText}>Guardar Configuración</Text>
-            </TouchableOpacity>
-          </View>
+              {/* Footer con Acciones */}
+              <View style={styles.footer}>
+                <TouchableOpacity
+                  style={styles.saveBtn}
+                  onPress={handleSave}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.saveBtnText}>Guardar Configuración</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </SafeAreaView>
       </View>
     </View>
@@ -607,24 +646,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.primary,
   },
-  catalogPickerBox: {
-    backgroundColor: '#18181B',
-    borderWidth: 1,
-    borderColor: '#27272A',
-    borderRadius: 12,
-    padding: SPACING.sm,
-    marginBottom: SPACING.md,
+  fullCatalogContainer: {
+    flex: 1,
+    paddingHorizontal: SPACING.md,
   },
-  catalogPickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.xs,
-  },
-  catalogPickerTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  catalogFiltersSection: {
+    paddingVertical: 2,
+    marginBottom: 4,
   },
   catalogFilterScroll: {
     gap: 6,
@@ -632,15 +660,15 @@ const styles = StyleSheet.create({
   },
   catalogFilterChip: {
     backgroundColor: '#27272A',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
   },
   catalogFilterChipActive: {
     backgroundColor: COLORS.primary,
   },
   catalogFilterChipText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.textSecondary,
   },
@@ -649,53 +677,91 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   catalogSearchInput: {
-    backgroundColor: '#09090B',
+    backgroundColor: '#18181B',
     borderWidth: 1,
     borderColor: '#27272A',
-    borderRadius: 8,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 6,
+    borderRadius: 10,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 10,
     color: '#FFFFFF',
-    fontSize: 12,
-    marginVertical: 6,
+    fontSize: 14,
+    marginBottom: SPACING.xs,
   },
-  catalogItemsList: {
-    maxHeight: 180,
+  catalogFlatListContent: {
+    paddingBottom: SPACING.md,
   },
   catalogItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#27272A',
+    borderBottomColor: '#222226',
   },
   catalogItemRowDisabled: {
-    opacity: 0.4,
+    opacity: 0.45,
   },
   catalogItemName: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   catalogItemNameDisabled: {
     color: COLORS.textSecondary,
   },
   catalogItemMuscle: {
-    fontSize: 10,
+    fontSize: 11,
     color: COLORS.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
+  },
+  alreadyAddedPill: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   alreadyAddedBadge: {
-    fontSize: 10,
+    fontSize: 11,
     color: COLORS.textSecondary,
-    fontStyle: 'italic',
+    fontWeight: '600',
+  },
+  addExerciseActionBadge: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(163, 230, 53, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(163, 230, 53, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catalogEmptyContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
   },
   catalogEmptyText: {
     color: COLORS.textSecondary,
-    fontSize: 12,
+    fontSize: 13,
     textAlign: 'center',
-    paddingVertical: 12,
     fontStyle: 'italic',
+  },
+  catalogBottomBar: {
+    paddingVertical: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: '#1E1E1E',
+    backgroundColor: '#121212',
+  },
+  backToSessionBtn: {
+    backgroundColor: '#27272A',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backToSessionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
   emptyPresetsBox: {
     flexDirection: 'row',
