@@ -3,7 +3,6 @@
 Aplicación móvil para registrar sesiones de ejercicio, series, pesos y cardio. Desarrollada con React Native, Expo SDK 57, Expo Router y almacenamiento local persistente en SQLite.
 
 ---
-
 ## 1. Qué necesitas instalar
 
 - **Visual Studio Code**, para abrir y editar el proyecto.
