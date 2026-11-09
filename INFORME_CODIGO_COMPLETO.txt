@@ -511,6 +511,15 @@ de registros, se implemento una estrategia dual de persistencia y respaldo:
 7. Tarjetas Colapsables en Planificacion (`PlanWeekAccordionItem` en `WeekPlanningCard.tsx` y `app/(tabs)/planificacion.tsx`):
    - Se implemento el comportamiento de acordeon con `LayoutAnimation`: la semana activa inicia expandida automaticamente y las semanas restantes inician contraidas mostrando su cabecera compacta de resumen (`S{N}`, `Semana {N}`, `{tipo} • {total} sesiones`, estado `ACTIVA` / `Activar`, borrar y chevron).
 
+8. Expansion del Catalogo de Ejercicios Oficial (80 ejercicios):
+   - Se incorporaron 16 ejercicios clave solicitados en `types/workout.ts`, totalizando 80 movimientos con soporte para persistencia automatica en SQLite (`seedExerciseCatalog`) y calculo estricto de PRs Absolutos:
+     * Pecho: Press Plano con Mancuernas, Press de Pecho en Máquina Inclinada.
+     * Espalda: Dominadas Neutras / Supinas (Chin-ups), Remo con Apoyo en Pecho (Chest-Supported Row / Sello), Remo Unilateral en Polea.
+     * Hombros: Press Militar Sentado con Mancuernas, Pájaros en Máquina (Reverse Pec Deck).
+     * Piernas: Sentadilla Búlgara (Split Squat con Mancuernas), Curl Nórdico (Nordic Hamstring Curl), Peso Muerto Sumo, Elevación de Talones Sentado (Sóleo).
+     * Brazos: Curl en Banco Inclinado con Mancuernas, Press Banca con Agarre Estrecho (Close-Grip Bench Press), Extensiones Katana en Polea (Triceps Katana Extension).
+     * Core: Pallof Press en Polea / Elástico, Paseo del Granjero (Farmer's Walk).
+
 ================================================================================
 15. ESTADO ACTUAL DE CALIDAD Y CODIGO
 ================================================================================

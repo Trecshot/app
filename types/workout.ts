@@ -23,6 +23,7 @@ export interface CatalogExercise {
 export const EXERCISE_CATALOG: CatalogExercise[] = [
   // --- PECHO ---
   { id: 'p1', name: 'Press Banca Plano', muscleGroup: 'Pecho' },
+  { id: 'chest_dumbbell_flat_press', name: 'Press Plano con Mancuernas', muscleGroup: 'Pecho' },
   { id: 'p2', name: 'Press Inclinado con Mancuernas', muscleGroup: 'Pecho' },
   { id: 'p3', name: 'Aperturas en Máquina (Pec Deck)', muscleGroup: 'Pecho' },
   { id: 'p4', name: 'Press Inclinado con Barra', muscleGroup: 'Pecho' },
@@ -34,13 +35,16 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
   { id: 'chest_cable_crossover_low', name: 'Cruces en Polea Baja (Hacia arriba)', muscleGroup: 'Pecho' },
   { id: 'chest_cable_crossover_high', name: 'Cruces en Polea Alta (Hacia abajo)', muscleGroup: 'Pecho' },
   { id: 'chest_machine_press', name: 'Press de Pecho en Máquina', muscleGroup: 'Pecho' },
+  { id: 'chest_incline_machine_press', name: 'Press de Pecho en Máquina Inclinada', muscleGroup: 'Pecho' },
   { id: 'chest_dumbbell_pullover', name: 'Pullover con Mancuerna', muscleGroup: 'Pecho' },
 
   // --- HOMBROS ---
   { id: 'h1', name: 'Press Militar con Barra', muscleGroup: 'Hombros' },
+  { id: 'shoulder_seated_dumbbell_press', name: 'Press Militar Sentado con Mancuernas', muscleGroup: 'Hombros' },
   { id: 'h2', name: 'Elevaciones Laterales', muscleGroup: 'Hombros' },
   { id: 'h3', name: 'Press Arnold', muscleGroup: 'Hombros' },
   { id: 'h4', name: 'Pájaros / Elevaciones Posteriores', muscleGroup: 'Hombros' },
+  { id: 'shoulder_reverse_pec_deck', name: 'Pájaros en Máquina (Reverse Pec Deck)', muscleGroup: 'Hombros' },
   { id: 'h5', name: 'Face Pulls en Polea', muscleGroup: 'Hombros' },
   { id: 'h6', name: 'Elevaciones Frontales con Mancuerna', muscleGroup: 'Hombros' },
   { id: 'h7', name: 'Remo al Mentón (Upright Row)', muscleGroup: 'Hombros' },
@@ -49,10 +53,13 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
 
   // --- ESPALDA ---
   { id: 'e1', name: 'Dominadas (Pull-ups)', muscleGroup: 'Espalda' },
+  { id: 'back_chin_ups', name: 'Dominadas Neutras / Supinas (Chin-ups)', muscleGroup: 'Espalda' },
   { id: 'e2', name: 'Jalón al Pecho en Polea', muscleGroup: 'Espalda' },
   { id: 'e3', name: 'Remo con Barra', muscleGroup: 'Espalda' },
   { id: 'e4', name: 'Remo Gironda (Polea Baja)', muscleGroup: 'Espalda' },
   { id: 'e5', name: 'Remo Unilateral con Mancuerna', muscleGroup: 'Espalda' },
+  { id: 'back_chest_supported_row', name: 'Remo con Apoyo en Pecho (Chest-Supported Row / Sello)', muscleGroup: 'Espalda' },
+  { id: 'back_cable_unilateral_row', name: 'Remo Unilateral en Polea', muscleGroup: 'Espalda' },
   { id: 'e6', name: 'Peso Muerto Convencional', muscleGroup: 'Espalda' },
   { id: 'e7', name: 'Pullover en Polea Alta', muscleGroup: 'Espalda' },
   { id: 'e8', name: 'Encogimientos de Trapecio', muscleGroup: 'Espalda' },
@@ -63,12 +70,16 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
 
   // --- PIERNAS ---
   { id: 'pi1', name: 'Sentadilla Trasera con Barra', muscleGroup: 'Piernas' },
+  { id: 'legs_bulgarian_split_squat', name: 'Sentadilla Búlgara (Split Squat con Mancuernas)', muscleGroup: 'Piernas' },
   { id: 'pi2', name: 'Prensa Inclinada (Leg Press)', muscleGroup: 'Piernas' },
   { id: 'pi3', name: 'Extensiones de Cuádriceps', muscleGroup: 'Piernas' },
   { id: 'pi4', name: 'Curl Femoral Tumbado/Sentado', muscleGroup: 'Piernas' },
+  { id: 'legs_nordic_curl', name: 'Curl Nórdico (Nordic Hamstring Curl)', muscleGroup: 'Piernas' },
   { id: 'pi5', name: 'Zancadas con Mancuernas', muscleGroup: 'Piernas' },
   { id: 'pi6', name: 'Peso Muerto Rumano', muscleGroup: 'Piernas' },
+  { id: 'legs_sumo_deadlift', name: 'Peso Muerto Sumo', muscleGroup: 'Piernas' },
   { id: 'pi7', name: 'Elevación de Talones (Gemelos)', muscleGroup: 'Piernas' },
+  { id: 'legs_seated_calf_raise', name: 'Elevación de Talones Sentado (Sóleo)', muscleGroup: 'Piernas' },
   { id: 'pi8', name: 'Hip Thrust con Barra', muscleGroup: 'Piernas' },
   { id: 'legs_hack_squat', name: 'Sentadilla Hack en Máquina', muscleGroup: 'Piernas' },
   { id: 'legs_smith_machine_squat', name: 'Sentadilla en Máquina Smith', muscleGroup: 'Piernas' },
@@ -80,7 +91,10 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
   // --- BRAZOS ---
   { id: 'b1', name: 'Curl de Bíceps con Barra Z', muscleGroup: 'Brazos' },
   { id: 'b2', name: 'Curl Martillo con Mancuernas', muscleGroup: 'Brazos' },
+  { id: 'arms_incline_dumbbell_curl', name: 'Curl en Banco Inclinado con Mancuernas', muscleGroup: 'Brazos' },
   { id: 'b3', name: 'Extensiones de Tríceps en Polea', muscleGroup: 'Brazos' },
+  { id: 'arms_close_grip_bench_press', name: 'Press Banca con Agarre Estrecho (Close-Grip Bench Press)', muscleGroup: 'Brazos' },
+  { id: 'arms_katana_tricep_extension', name: 'Extensiones Katana en Polea (Triceps Katana Extension)', muscleGroup: 'Brazos' },
   { id: 'b4', name: 'Press Francés con Barra', muscleGroup: 'Brazos' },
   { id: 'b5', name: 'Curl Concentrado con Mancuerna', muscleGroup: 'Brazos' },
   { id: 'b6', name: 'Fondos entre Bancos para Tríceps', muscleGroup: 'Brazos' },
@@ -96,6 +110,8 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
   { id: 'c4', name: 'Crunch en Polea Alta', muscleGroup: 'Core' },
   { id: 'c5', name: 'Russian Twist con Disco', muscleGroup: 'Core' },
   { id: 'core_plank_weighted', name: 'Plancha (Plank) con Lastre', muscleGroup: 'Core' },
+  { id: 'core_pallof_press', name: 'Pallof Press en Polea / Elástico', muscleGroup: 'Core' },
+  { id: 'core_farmers_walk', name: "Paseo del Granjero (Farmer's Walk)", muscleGroup: 'Core' },
 ];
 
 // Estructura y tipificación de una serie
