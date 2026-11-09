@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Check } from 'lucide-react-native';
+import { Check, FastForward } from 'lucide-react-native';
 import { COLORS, SPACING } from '../../theme';
 import {
   BLOCK_TARGET_SESSIONS,
@@ -9,27 +9,36 @@ import {
   isBlockExpired,
   useSessionStore,
 } from '../../store/useSessionStore';
+import { useWorkoutStore } from '../../store/useWorkoutStore';
+import { promptForceCloseWeek } from '../../database/planQueries';
 import type { WeekType } from '../../../types';
 
 /**
- * Modal global de gestión de bloques de 7 sesiones efectivas (carga/descarga).
- * - Sin bloqueos forzosos ni sugerencias invasivas: el usuario tiene total libertad
- *   para encadenar semanas de sobrecarga o pasar a descarga según sus necesidades.
+ * Modal global de gestión de bloques y semanas (carga/descarga) con soporte
+ * de cierre manual anticipado de semana o bloque activo.
  */
 export function NewBlockModal() {
   const blockStatus = useSessionStore((s) => s.blockStatus);
   const lastBlock = useSessionStore((s) => s.lastBlock);
   const currentBlock = useSessionStore((s) => s.currentBlock);
+  const activeWeek = useSessionStore((s) => s.activeWeek);
   const isBlockPickerOpen = useSessionStore((s) => s.isBlockPickerOpen);
   const startNewBlock = useSessionStore((s) => s.startNewBlock);
   const changeCurrentBlockType = useSessionStore((s) => s.changeCurrentBlockType);
+  const forceAdvanceWeek = useSessionStore((s) => s.forceAdvanceWeek);
   const closeBlockPicker = useSessionStore((s) => s.closeBlockPicker);
-  const [saving, setSaving] = useState<WeekType | null>(null);
+  const [saving, setSaving] = useState<WeekType | 'advance' | null>(null);
 
   const isInitialSetup = blockStatus === 'needs_new';
   const isEditing = !isInitialSetup && isBlockPickerOpen && currentBlock !== null;
   const isCompletedBlock = currentBlock ? isBlockExpired(currentBlock) : false;
   const selectedType = isEditing && !isCompletedBlock ? currentBlock?.type : undefined;
+
+  const completedSessions = Math.max(0, currentBlock?.sessionCount ?? 0);
+  const totalSessions =
+    activeWeek?.total_planned_sessions ??
+    currentBlock?.targetSessions ??
+    BLOCK_TARGET_SESSIONS;
 
   const handleSelect = async (type: WeekType) => {
     try {
@@ -47,6 +56,32 @@ export function NewBlockModal() {
     }
   };
 
+  const handleForceCloseWeek = () => {
+    const weekNum = activeWeek?.week_number ?? 1;
+    promptForceCloseWeek(weekNum, completedSessions, totalSessions, async () => {
+      try {
+        setSaving('advance');
+        await forceAdvanceWeek();
+        const sessionState = useSessionStore.getState();
+        const workoutState = useWorkoutStore.getState();
+        if (!sessionState.isActive) {
+          workoutState.resetWorkout();
+          if (sessionState.activeWeek) {
+            workoutState.hydratePreloadedSession(
+              sessionState.activeSessionTargetMuscles,
+              sessionState.activeSessionPresetExerciseIds,
+            );
+          }
+        }
+      } catch (error) {
+        console.error('Error al avanzar de semana manualmente:', error);
+        Alert.alert('Error', 'No se pudo avanzar a la siguiente semana.');
+      } finally {
+        setSaving(null);
+      }
+    });
+  };
+
   const handleClose = () => {
     if (isInitialSetup) {
       void handleSelect('carga');
@@ -55,22 +90,23 @@ export function NewBlockModal() {
     closeBlockPicker();
   };
 
-  let eyebrow = 'NUEVO BLOQUE (7 SESIONES)';
+  let eyebrow = `NUEVO BLOQUE (${totalSessions} SESIONES)`;
   let modalTitle = '¿Cómo será este bloque?';
   let subtitle =
-    'El bloque se contabiliza por 7 sesiones efectivas completadas, sin atarse rígidamente a los días del calendario.';
+    'El bloque se contabiliza por sesiones efectivas completadas, sin atarse rígidamente a los días del calendario.';
 
   if (isEditing && currentBlock) {
-    const target = currentBlock.targetSessions ?? BLOCK_TARGET_SESSIONS;
     const initiatedText = formatBlockStartDate(currentBlock.startDate);
     if (isCompletedBlock) {
-      eyebrow = `BLOQUE FINALIZADO (${target}/${target})`;
-      modalTitle = 'Iniciar siguiente bloque de 7 sesiones';
-      subtitle = `${initiatedText} · ${target}/${target} sesiones completadas. Elige el enfoque para tu próximo bloque de 7 sesiones.`;
+      eyebrow = `BLOQUE FINALIZADO (${totalSessions}/${totalSessions})`;
+      modalTitle = 'Iniciar siguiente bloque';
+      subtitle = `${initiatedText} · ${totalSessions}/${totalSessions} sesiones completadas. Elige el enfoque para tu próximo bloque.`;
     } else {
-      eyebrow = 'BLOQUE ACTUAL';
+      eyebrow = activeWeek
+        ? `SEMANA ${activeWeek.week_number} ACTIVA`
+        : 'BLOQUE ACTUAL';
       modalTitle = '¿En qué bloque estás?';
-      subtitle = `${initiatedText} · Sesión ${getBlockDay(currentBlock)}/${target}. Puedes cambiar el tipo del bloque actual en cualquier momento.`;
+      subtitle = `${initiatedText} · Sesión ${getBlockDay(currentBlock)}/${totalSessions} (${completedSessions}/${totalSessions} completadas). Puedes cambiar el tipo o concluir la semana actual para avanzar.`;
     }
   } else if (lastBlock) {
     subtitle = `Tu bloque anterior de ${lastBlock.type} (${formatBlockStartDate(lastBlock.startDate)}) finalizó. ${subtitle}`;
@@ -126,6 +162,28 @@ export function NewBlockModal() {
 
           {renderOption('carga', 'Semana de Carga', 'Progresión de peso y volumen')}
           {renderOption('descarga', 'Semana de Descarga', 'Reducción de intensidad')}
+
+          {isEditing && !isCompletedBlock && (
+            <TouchableOpacity
+              style={styles.forceAdvanceButton}
+              onPress={handleForceCloseWeek}
+              disabled={saving !== null}
+              activeOpacity={0.8}
+            >
+              {saving === 'advance' ? (
+                <ActivityIndicator color={COLORS.primary} />
+              ) : (
+                <>
+                  <FastForward size={16} color={COLORS.primary} />
+                  <Text style={styles.forceAdvanceText}>
+                    {activeWeek
+                      ? `Concluir Semana ${activeWeek.week_number} y avanzar (${completedSessions}/${totalSessions})`
+                      : `Concluir bloque actual e iniciar nuevo (${completedSessions}/${totalSessions})`}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={styles.cancelButton}
@@ -214,6 +272,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     marginTop: 2,
+  },
+  forceAdvanceButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: SPACING.xs,
+    paddingVertical: 12,
+    paddingHorizontal: SPACING.md,
+    borderRadius: 12,
+    backgroundColor: COLORS.primarySoft,
+    borderWidth: 1,
+    borderColor: COLORS.primaryBorder,
+  },
+  forceAdvanceText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+    flexShrink: 1,
   },
   cancelButton: {
     alignItems: 'center',

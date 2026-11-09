@@ -489,7 +489,30 @@ de registros, se implemento una estrategia dual de persistencia y respaldo:
    - Se reemplazo la alerta nativa en `handleOpenSettings` (`app/(tabs)/index.tsx`) por `ConfirmModal` AMOLED y se migro `SafeAreaView` en `WorkoutSummaryModal.tsx` a `react-native-safe-area-context`.
 
 ================================================================================
-14. ESTADO ACTUAL DE CALIDAD Y CODIGO
+14. MEJORA DE EXPERIENCIA DE USUARIO, FRECUENCIA (3-7), DESCANSO 1:30 Y CABECERA UNIFICADA
+================================================================================
+1. Extension del Selector de Frecuencia (3 a 7 Sesiones):
+   - En `WeekPlanningCard.tsx` y `app/(tabs)/planificacion.tsx`, se actualizo `FREQUENCY_OPTIONS = [3, 4, 5, 6, 7]` permitiendo seleccionar desde 3 hasta 7 sesiones por bloque.
+   - Se implemento la mutacion atomica `updateWeekFrequency` en `src/database/planQueries.ts` (conectada a `MesocycleRepository.updateWeekPlannedSessions`): actualiza `total_planned_sessions`, elimina ordinales sobrantes (`session_index > newTotal`) al reducir, e inserta las filas ordinales faltantes vacias (`1..newTotal`) al incrementar.
+
+2. Cuadricula de Descanso con 1:30 (90 Segundos):
+   - En `src/hooks/useWorkoutTimer.ts` y `src/components/workout/TimerDisplay.tsx` (`RestTimerPicker`), se inserto el preset `{ label: '1:30', seconds: 90 }` en `REST_PRESETS` / `REST_TIMER_OPTIONS` dentro de una cuadricula simetrica para series de aislamiento y accesorios.
+
+3. Cierre Manual de Bloques y Semanas Consecutivas:
+   - Se implementaron `promptForceCloseWeek` y `forceAdvanceWeek` en `src/database/planQueries.ts`, `MesocycleRepository` y `useSessionStore`, accesibles desde `NewBlockModal.tsx` y `WeekPlanningCard.tsx`.
+   - Permite concluir anticipadamente una semana activa incompleta (ej. 3/4 sesiones), marcandola con `is_current = 0, is_completed = 1`, activando la semana N+1 (o cerrando el ciclo si era la ultima) y generando un nuevo registro en `training_blocks` con `sessions_count = 0` para iniciar en Sesion 1/N.
+
+4, 5 y 6. Unificacion de Cabecera y Tarjeta de Vista Previa Compacta (`app/(tabs)/index.tsx`):
+   - Se reestructuro el encabezado de la pantalla de entrenamiento en un componente `unifiedHeader` compacto que prioriza el boton de accion principal ("Comenzar") sin scroll forzado:
+     * Fila 1: Pildora de estado limpia (`Semana X (Carga/Descarga) • Sesion Y/Z` o `Entrenamiento Libre`) conectada al selector de bloque y subtitulo con fecha actual.
+     * Fila 2: Acordeon plegable de `OBJETIVO DE LA SESION` (`noteExpanded`) con animacion fluida para consultar objetivo semanal, nota tactica y pre-carga bajo demanda.
+     * Fila 3: Boton de arranque prominente (`▶ Comenzar` / `⏸ Pausar` / `▶ Reanudar`) con cronometro compacto integrado cuando la sesion esta activa.
+
+7. Tarjetas Colapsables en Planificacion (`PlanWeekAccordionItem` en `WeekPlanningCard.tsx` y `app/(tabs)/planificacion.tsx`):
+   - Se implemento el comportamiento de acordeon con `LayoutAnimation`: la semana activa inicia expandida automaticamente y las semanas restantes inician contraidas mostrando su cabecera compacta de resumen (`S{N}`, `Semana {N}`, `{tipo} • {total} sesiones`, estado `ACTIVA` / `Activar`, borrar y chevron).
+
+================================================================================
+15. ESTADO ACTUAL DE CALIDAD Y CODIGO
 ================================================================================
 - TypeScript: `npx tsc --noEmit` -> 0 errores.
 - Expo Linter: `npx expo lint` -> 0 advertencias, 0 errores.

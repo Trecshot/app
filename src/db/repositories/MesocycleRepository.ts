@@ -1,5 +1,9 @@
 import { getDatabase } from '../../../database';
-import { clearCurrentPlanning as clearCurrentPlanningDb } from '../../database/planQueries';
+import {
+  clearCurrentPlanning as clearCurrentPlanningDb,
+  forceAdvanceWeek as forceAdvanceWeekDb,
+  updateWeekFrequency as updateWeekFrequencyDb,
+} from '../../database/planQueries';
 import type {
   MesocycleWeek,
   PlannedSessionConfig,
@@ -263,11 +267,22 @@ export class MesocycleRepository {
     totalSessions: number,
   ): Promise<void> {
     const db = await getDatabase();
-    const cleanSessions = Math.max(1, Math.min(10, Math.round(totalSessions || 7)));
-    await db.runAsync(
-      `UPDATE mesocycle_weeks SET total_planned_sessions = ? WHERE id = ?;`,
-      [cleanSessions, weekId],
-    );
+    await updateWeekFrequencyDb(db, weekId, totalSessions);
+  }
+
+  static async updateWeekFrequency(
+    weekId: number,
+    totalSessions: number,
+  ): Promise<void> {
+    const db = await getDatabase();
+    await updateWeekFrequencyDb(db, weekId, totalSessions);
+  }
+
+  static async forceAdvanceWeek(
+    currentWeekId: number,
+  ): Promise<{ nextWeekId: number | null; planFinished: boolean }> {
+    const db = await getDatabase();
+    return forceAdvanceWeekDb(db, currentWeekId);
   }
 
   static async setActiveWeek(weekId: number): Promise<void> {

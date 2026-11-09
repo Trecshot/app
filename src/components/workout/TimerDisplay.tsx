@@ -12,10 +12,49 @@ import { Timer, ChevronDown, ChevronUp, X, Play } from 'lucide-react-native';
 import {
   useWorkoutTimer,
   useSessionElapsedTimer,
-  REST_TIMER_OPTIONS,
+  REST_PRESETS,
   formatRestDuration,
 } from '../../hooks/useWorkoutTimer';
 import { COLORS, SPACING } from '../../theme';
+
+export { REST_PRESETS };
+
+export interface RestTimerPickerProps {
+  onSelectTime: (seconds: number) => void;
+  selectedSeconds?: number;
+}
+
+export function RestTimerPicker({
+  onSelectTime,
+  selectedSeconds = 120,
+}: RestTimerPickerProps) {
+  return (
+    <View style={styles.gridContainer}>
+      {REST_PRESETS.map((item) => {
+        const isCurrent = selectedSeconds === item.seconds;
+        return (
+          <TouchableOpacity
+            key={item.seconds}
+            style={[styles.timerChip, isCurrent && styles.timerChipActive]}
+            onPress={() => onSelectTime(item.seconds)}
+            activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel={`Seleccionar descanso de ${item.label}`}
+          >
+            <Text
+              style={[
+                styles.timerChipText,
+                isCurrent && styles.timerChipTextActive,
+              ]}
+            >
+              {item.label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
 
 export interface TimerDisplayProps {
   setId?: string;
@@ -65,7 +104,7 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
   const dropdownAnimatedStyle = {
     maxHeight: dropdownAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: [0, 130],
+      outputRange: [0, 150],
     }),
     opacity: dropdownAnim,
     overflow: 'hidden' as const,
@@ -178,35 +217,12 @@ export const TimerDisplay: React.FC<TimerDisplayProps> = ({
         )}
       </View>
 
-      {/* Despliegue de opciones: 1:00, 2:00, 2:30, 3:00, 3:30, 4:00, 4:30, 5:00 */}
+      {/* Despliegue de opciones: 1:00, 1:30, 2:00, 2:30, 3:00, 3:30, 4:00, 4:30, 5:00 */}
       <Animated.View style={[styles.dropdownContainer, dropdownAnimatedStyle]}>
-        <View style={styles.optionsGrid}>
-          {REST_TIMER_OPTIONS.map((option) => {
-            const isSelected = selectedSeconds === option.seconds;
-            return (
-              <TouchableOpacity
-                key={option.seconds}
-                style={[
-                  styles.optionChip,
-                  isSelected && styles.optionChipSelected,
-                ]}
-                onPress={() => handleSelectOption(option.seconds)}
-                activeOpacity={0.75}
-                accessibilityRole="button"
-                accessibilityLabel={`Seleccionar descanso de ${option.label}`}
-              >
-                <Text
-                  style={[
-                    styles.optionChipText,
-                    isSelected && styles.optionChipTextSelected,
-                  ]}
-                >
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <RestTimerPicker
+          onSelectTime={handleSelectOption}
+          selectedSeconds={selectedSeconds}
+        />
       </Animated.View>
     </View>
   );
@@ -347,7 +363,7 @@ const styles = StyleSheet.create({
   dropdownContainer: {
     marginTop: 4,
   },
-  optionsGrid: {
+  gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
@@ -357,9 +373,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 8,
   },
-  optionChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+  timerChip: {
+    width: '18%',
+    flexGrow: 1,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
     borderRadius: 8,
     backgroundColor: COLORS.surfaceHighlight,
     borderWidth: 1,
@@ -367,17 +385,17 @@ const styles = StyleSheet.create({
     minWidth: 54,
     alignItems: 'center',
   },
-  optionChipSelected: {
+  timerChipActive: {
     backgroundColor: 'rgba(163, 230, 53, 0.18)',
     borderColor: COLORS.primary,
   },
-  optionChipText: {
+  timerChipText: {
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.textPrimary,
     fontVariant: ['tabular-nums'],
   },
-  optionChipTextSelected: {
+  timerChipTextActive: {
     color: COLORS.primary,
     fontWeight: '800',
   },

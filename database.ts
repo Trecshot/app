@@ -525,6 +525,10 @@ async function migratePlannedSessionPreloads(db: SQLite.SQLiteDatabase): Promise
   if (!noteColumns.some((col) => col.name === 'preset_exercise_ids')) {
     await db.execAsync("ALTER TABLE planned_session_notes ADD COLUMN preset_exercise_ids TEXT DEFAULT '[]';");
   }
+  const weekColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(mesocycle_weeks);');
+  if (!weekColumns.some((col) => col.name === 'is_completed')) {
+    await db.execAsync('ALTER TABLE mesocycle_weeks ADD COLUMN is_completed INTEGER DEFAULT 0;');
+  }
 }
 
 async function ensureMesocycleTables(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -537,7 +541,8 @@ async function ensureMesocycleTables(db: SQLite.SQLiteDatabase): Promise<void> {
         type TEXT NOT NULL CHECK(type IN ('CARGA', 'DESCARGA')),
         total_planned_sessions INTEGER DEFAULT 7,
         week_comment TEXT,
-        is_current INTEGER DEFAULT 0
+        is_current INTEGER DEFAULT 0,
+        is_completed INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS planned_session_notes (

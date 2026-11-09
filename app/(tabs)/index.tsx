@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,10 +9,12 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  LayoutAnimation,
+  UIManager,
 } from 'react-native';
 import { Crypto } from '../../src/utils/uuid';
 import { router, useFocusEffect } from 'expo-router';
-import { Settings, Maximize, RotateCcw, Sparkles } from 'lucide-react-native';
+import { Settings, RotateCcw } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, LINE_HEIGHT, SPACING, TOUCH_TARGET } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
 import { SessionStopwatchDisplay } from '../../src/components/workout/TimerDisplay';
@@ -26,12 +28,40 @@ import {
   useSessionStore,
   isBlockExpired,
 } from '../../src/store/useSessionStore';
-import { BlockIndicator } from '../../src/components/workout/BlockIndicator';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import type { CardioBlock, Ejercicio, MuscleGroup, SesionEntrenamiento, WorkoutExerciseBlock } from '../../types';
 import { MUSCLE_GROUPS, getCatalogExerciseName } from '../../types';
 import { exportDatabaseBackup } from '../../src/utils/databaseBackup';
 import { toStrictIntegerReps, toStrictRealWeight } from '../../src/utils/prEngine';
+
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const SHORT_MONTHS_ES = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+];
+
+function formatDate(date: Date): string {
+  const day = date.getDate();
+  const month = SHORT_MONTHS_ES[date.getMonth()] ?? '';
+  const year = date.getFullYear();
+  return `${day} ${month} ${year}`;
+}
 
 export default function ActiveWorkoutScreen() {
   const sessionFocus = useWorkoutStore((s) => s.sessionFocus);
@@ -62,6 +92,64 @@ export default function ActiveWorkoutScreen() {
   const activeSessionPresetExerciseIds = useSessionStore(
     (s) => s.activeSessionPresetExerciseIds,
   );
+  const openSessionSelectorModal = useSessionStore((s) => s.openBlockPicker);
+
+  const [noteExpanded, setNoteExpanded] = useState(false);
+
+  const isPlanningActive = Boolean(activeWeek);
+  const currentWeek = activeWeek?.week_number ?? 1;
+  const weekType = activeWeek?.type === 'DESCARGA' ? 'Descarga' : 'Carga';
+  const currentOrdinal = currentSessionIndex;
+  const totalSessions =
+    activeWeek?.total_planned_sessions ?? currentBlock?.targetSessions ?? 7;
+
+  const tacticalNote = useMemo(() => {
+    const parts: string[] = [];
+    if (activeWeek?.week_comment?.trim()) {
+      parts.push(`Objetivo semanal: ${activeWeek.week_comment.trim()}`);
+    }
+    if (activeSessionNote?.trim()) {
+      parts.push(sanitizeTacticalNote(activeSessionNote));
+    }
+    if (
+      activeSessionTargetMuscles.length > 0 ||
+      activeSessionPresetExerciseIds.length > 0
+    ) {
+      const preloadParts: string[] = [];
+      if (activeSessionTargetMuscles.length > 0) {
+        preloadParts.push(`Enfoque (${activeSessionTargetMuscles.join(', ')})`);
+      }
+      if (activeSessionPresetExerciseIds.length > 0) {
+        preloadParts.push(
+          `${activeSessionPresetExerciseIds.length} ${
+            activeSessionPresetExerciseIds.length === 1
+              ? 'ejercicio pre-cargado'
+              : 'ejercicios pre-cargados'
+          }`,
+        );
+      }
+      parts.push(`Pre-carga: ${preloadParts.join(' • ')}`);
+    }
+    return parts.join('\n');
+  }, [
+    activeWeek,
+    activeSessionNote,
+    activeSessionTargetMuscles,
+    activeSessionPresetExerciseIds,
+  ]);
+
+  const handleToggleNoteAccordion = () => {
+    try {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    } catch {
+      // safe fallback
+    }
+    setNoteExpanded((prev) => !prev);
+  };
+
+  const handleToggleWorkout = () => {
+    toggleSession();
+  };
 
   // Función atómica encargada de leer la pre-carga desde SQLite y sincronizar con la sesión activa
   const hydrateCurrentSessionData = useCallback(async () => {
@@ -147,12 +235,6 @@ export default function ActiveWorkoutScreen() {
     : isActive
     ? '• SESIÓN PAUSADA'
     : '• LISTO PARA EMPEZAR';
-
-  const timerButtonText = isRunning
-    ? '⏸ Pausar'
-    : isActive
-    ? '▶ Reanudar'
-    : '▶ Comenzar';
 
   const handleResetTimer = () => {
     setConfirmModalConfig({
@@ -389,94 +471,71 @@ export default function ActiveWorkoutScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Header Superior */}
+        {/* Cabecera Superior Compacta */}
         <View style={styles.topHeader}>
           <View>
             <Text style={styles.headerSubtitle}>MI ENTRENAMIENTO</Text>
             <Text style={styles.headerTitle}>Entrena con intención.</Text>
-            <BlockIndicator />
           </View>
           <View style={styles.headerIcons}>
-            <TouchableOpacity style={styles.iconButton}>
-              <Maximize size={20} color={COLORS.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={handleOpenSettings} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={handleOpenSettings}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Settings size={20} color={COLORS.textPrimary} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Módulo de Planificación Condicional (Opcional: solo aparece si el usuario configuró su mesociclo) */}
-        {activeWeek && (
-          <View style={styles.planningBannerCard}>
-            <View style={styles.planningHeaderRow}>
-              <View style={styles.planningTitleGroup}>
-                <Text style={styles.planningWeekEyebrow}>
-                  SEMANA {activeWeek.week_number} • {activeWeek.type}
-                </Text>
-                <Text style={styles.planningSessionMeta}>
-                  Sesión {currentSessionIndex}/{activeWeek.total_planned_sessions}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.navigate('/planificacion')}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={styles.planningEditLink}>Editar plan</Text>
-              </TouchableOpacity>
-            </View>
-
-            {activeWeek.week_comment ? (
-              <Text style={styles.planningObjectiveText}>
-                <Text style={styles.planningObjectiveLabel}>Objetivo: </Text>
-                {activeWeek.week_comment}
+        {/* Cabecera Unificada y Tarjeta de Vista Previa Compacta (Puntos 4, 5 y 6) */}
+        <View style={styles.unifiedHeader}>
+          {/* Fila 1: Píldora de Estado Limpia e Historial de Inicio */}
+          <View style={styles.statusRow}>
+            <TouchableOpacity
+              style={styles.sessionPill}
+              onPress={openSessionSelectorModal}
+              activeOpacity={0.75}
+            >
+              <View style={styles.greenDot} />
+              <Text style={styles.sessionPillText} numberOfLines={1}>
+                {isPlanningActive
+                  ? `Semana ${currentWeek} (${weekType}) • Sesión ${currentOrdinal}/${totalSessions}`
+                  : 'Entrenamiento Libre'}
               </Text>
-            ) : null}
+              <Text style={styles.pillChevron}>▾</Text>
+            </TouchableOpacity>
 
-            {activeSessionNote ? (
-              <View style={styles.planningSessionNoteBox}>
-                <Text style={styles.planningInfoLabel}>
-                  NOTA TÁCTICA · SESIÓN {currentSessionIndex}/{activeWeek.total_planned_sessions}
-                </Text>
-                <Text style={styles.planningSessionNoteText}>
-                  {sanitizeTacticalNote(activeSessionNote)}
-                </Text>
-              </View>
-            ) : null}
-
-            {(activeSessionTargetMuscles.length > 0 ||
-              activeSessionPresetExerciseIds.length > 0) && (
-              <View style={styles.planningPreloadBox}>
-                <View style={styles.planningPreloadLabelRow}>
-                  <Sparkles size={12} color={COLORS.primary} />
-                  <Text style={styles.planningInfoLabel}>PRE-CARGA</Text>
-                </View>
-                <Text style={styles.planningPreloadText}>
-                  {activeSessionTargetMuscles.length > 0
-                    ? `Enfoque (${activeSessionTargetMuscles.join(', ')})`
-                    : ''}
-                  {activeSessionTargetMuscles.length > 0 &&
-                  activeSessionPresetExerciseIds.length > 0
-                    ? ' • '
-                    : ''}
-                  {activeSessionPresetExerciseIds.length > 0
-                    ? `${activeSessionPresetExerciseIds.length} ${
-                        activeSessionPresetExerciseIds.length === 1
-                          ? 'ejercicio'
-                          : 'ejercicios'
-                      }`
-                    : ''}
-                </Text>
-              </View>
-            )}
+            <Text style={styles.dateSubtitle}>{formatDate(new Date())}</Text>
           </View>
-        )}
 
-        {/* Tarjeta Oscura del Cronómetro */}
-        <View style={styles.timerCard}>
-          <View style={styles.timerHeaderRow}>
-            <Text style={styles.timerLabel}>{timerStatus}</Text>
-            {isActive && (
+          {/* Fila 2: Acordeón Plegable de Objetivos / Nota Táctica */}
+          {tacticalNote ? (
+            <View style={styles.collapsibleNoteContainer}>
+              <TouchableOpacity
+                style={styles.noteToggleBar}
+                onPress={handleToggleNoteAccordion}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.noteLabel}>OBJETIVO DE LA SESIÓN</Text>
+                <Text style={styles.chevronSmall}>
+                  {noteExpanded ? '▲' : '▼'}
+                </Text>
+              </TouchableOpacity>
+
+              {noteExpanded && (
+                <Text style={styles.tacticalNoteBody}>{tacticalNote}</Text>
+              )}
+            </View>
+          ) : null}
+
+          {/* Cronómetro compacto cuando la sesión está activa */}
+          {isActive && (
+            <View style={styles.activeStopwatchRow}>
+              <View style={styles.activeStopwatchLeft}>
+                <Text style={styles.timerLabel}>{timerStatus}</Text>
+                <SessionStopwatchDisplay style={styles.compactStopwatchText} />
+              </View>
               <TouchableOpacity
                 onPress={handleResetTimer}
                 style={styles.resetIconButton}
@@ -484,28 +543,33 @@ export default function ActiveWorkoutScreen() {
               >
                 <RotateCcw size={16} color={COLORS.textSecondary} />
               </TouchableOpacity>
-            )}
-          </View>
+            </View>
+          )}
 
-          <View style={styles.timerCenter}>
-            <SessionStopwatchDisplay />
-          </View>
-
+          {/* Fila 3: Botón de Arranque Prominente */}
           <TouchableOpacity
             style={[
-              styles.startButton,
+              styles.startWorkoutButton,
               isRunning && { backgroundColor: COLORS.pause },
             ]}
-            onPress={toggleSession}
+            onPress={handleToggleWorkout}
             activeOpacity={0.8}
           >
             <Text
               style={[
-                styles.startButtonText,
+                styles.startWorkoutIcon,
                 isRunning ? { color: '#FFFFFF' } : { color: COLORS.textInverted },
               ]}
             >
-              {timerButtonText}
+              {isRunning ? '⏸' : '▶'}
+            </Text>
+            <Text
+              style={[
+                styles.startWorkoutText,
+                isRunning ? { color: '#FFFFFF' } : { color: COLORS.textInverted },
+              ]}
+            >
+              {isRunning ? 'Pausar' : isActive ? 'Reanudar' : 'Comenzar'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -708,19 +772,19 @@ const styles = StyleSheet.create({
   topHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.lg,
+    alignItems: 'center',
+    marginBottom: SPACING.md,
   },
   headerSubtitle: {
     color: COLORS.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   headerTitle: {
     color: COLORS.textPrimary,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
   },
   headerIcons: {
@@ -737,39 +801,132 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 12,
   },
-  timerCard: {
-    backgroundColor: COLORS.timerSurface,
-    borderRadius: 20,
-    padding: SPACING.lg,
-    marginBottom: SPACING.xl,
+  unifiedHeader: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 16,
+    padding: SPACING.md,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+  sessionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.surfaceHighlight,
+    borderWidth: 1,
+    borderColor: COLORS.primaryBorder,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    flexShrink: 1,
+  },
+  greenDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: COLORS.primary,
+  },
+  sessionPillText: {
+    color: COLORS.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+    flexShrink: 1,
+  },
+  pillChevron: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  dateSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  collapsibleNoteContainer: {
+    backgroundColor: COLORS.surfaceHighlight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.primary,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  noteToggleBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  noteLabel: {
+    color: COLORS.primary,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  chevronSmall: {
+    color: COLORS.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  tacticalNoteBody: {
+    color: COLORS.textBody,
+    fontSize: 13,
+    lineHeight: LINE_HEIGHT.sm,
+    marginTop: 6,
+  },
+  activeStopwatchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surfaceHighlight,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  timerHeaderRow: {
+  activeStopwatchLeft: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
+  },
+  compactStopwatchText: {
+    fontSize: 22,
+    fontWeight: '800',
   },
   timerLabel: {
     color: COLORS.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   resetIconButton: {
     padding: 4,
   },
-  timerCenter: {
+  startWorkoutButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: SPACING.lg,
-  },
-  startButton: {
+    justifyContent: 'center',
+    gap: 8,
     backgroundColor: COLORS.primary,
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderRadius: 12,
-    alignItems: 'center',
   },
-  startButtonText: {
+  startWorkoutIcon: {
+    color: COLORS.textInverted,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  startWorkoutText: {
     color: COLORS.textInverted,
     fontSize: 16,
     fontWeight: '800',

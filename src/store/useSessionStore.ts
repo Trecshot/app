@@ -93,6 +93,7 @@ export interface SessionState {
   activeSessionPresetExerciseIds: string[];
   loadPlanningContext: () => Promise<void>;
   evaluateBlockCompletion: () => Promise<{ planCompleted: boolean; advancedWeek?: MesocycleWeek | null }>;
+  forceAdvanceWeek: () => Promise<{ planFinished: boolean }>;
   clearPlanning: () => Promise<void>;
 }
 
@@ -296,6 +297,29 @@ export const useSessionStore = create<SessionState>()(
           console.error('Error al evaluar la transición del mesociclo:', error);
           return { planCompleted: false };
         }
+      },
+
+      forceAdvanceWeek: async () => {
+        const { activeWeek, currentBlock } = get();
+        if (activeWeek) {
+          const result = await MesocycleRepository.forceAdvanceWeek(activeWeek.id);
+          set({ isBlockPickerOpen: false });
+          await get().initBlock();
+          return { planFinished: result.planFinished };
+        }
+        // En modo libre manual: crear un nuevo bloque manteniendo el tipo actual y reiniciando a Sesión 1
+        const nextType = currentBlock?.type ?? 'carga';
+        const nextTarget = currentBlock?.targetSessions ?? BLOCK_TARGET_SESSIONS;
+        const block = await WorkoutRepository.createBlock(nextType, nextTarget);
+        set({
+          currentBlock: block,
+          lastBlock: block,
+          blockStatus: 'active',
+          isBlockPickerOpen: false,
+          showDeloadSuggestion: false,
+          currentSessionIndex: 1,
+        });
+        return { planFinished: false };
       },
 
       clearPlanning: async () => {

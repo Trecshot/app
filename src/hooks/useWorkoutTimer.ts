@@ -21,11 +21,11 @@ export interface RestTimerOption {
 }
 
 /**
- * Opciones de despliegue de 1 minuto a 5 minutos.
- * A partir del minuto 2 incluye intervalos de 30 segundos (2:30, 3:30, 4:30).
+ * Opciones de despliegue de 1 minuto a 5 minutos en intervalos de 30 segundos (incluyendo 1:30).
  */
 export const REST_TIMER_OPTIONS: RestTimerOption[] = [
   { label: '1:00', seconds: 60 },
+  { label: '1:30', seconds: 90 }, // Inserción clave para aislamiento/accesorios
   { label: '2:00', seconds: 120 },
   { label: '2:30', seconds: 150 },
   { label: '3:00', seconds: 180 },
@@ -34,6 +34,8 @@ export const REST_TIMER_OPTIONS: RestTimerOption[] = [
   { label: '4:30', seconds: 270 },
   { label: '5:00', seconds: 300 },
 ];
+
+export const REST_PRESETS = REST_TIMER_OPTIONS;
 
 export const formatRestDuration = (sec: number): string => {
   const safe = Math.max(0, Math.round(sec));

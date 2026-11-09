@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -15,15 +14,8 @@ import {
   Calendar,
   Plus,
   Trash2,
-  ChevronDown,
-  ChevronUp,
-  CheckCircle2,
   Sparkles,
-  FileText,
   Layers,
-  Sliders,
-  Dumbbell,
-  ChevronRight,
 } from 'lucide-react-native';
 import { COLORS, GLOBAL_STYLES, LINE_HEIGHT, SPACING } from '../../src/theme';
 import { ConfirmModal } from '../../src/components/ui/ConfirmModal';
@@ -31,15 +23,22 @@ import {
   SessionConfigModal,
   SessionConfigData,
 } from '../../src/components/planning/SessionConfigModal';
+import {
+  WeekPlanningCard,
+  PlanWeekAccordionItem,
+  FREQUENCY_OPTIONS,
+} from '../../src/components/planning/WeekPlanningCard';
 import { MesocycleRepository } from '../../src/db/repositories/MesocycleRepository';
+import { promptForceCloseWeek } from '../../src/database/planQueries';
 import {
   plannedTypeToBlockType,
   useSessionStore,
 } from '../../src/store/useSessionStore';
+import { useWorkoutStore } from '../../src/store/useWorkoutStore';
 import { WorkoutRepository } from '../../src/db/repositories/WorkoutRepository';
 import type { MesocycleWeek, PlannedSessionConfig, PlannedWeekType } from '../../types';
 
-const SESSION_QUOTA_OPTIONS = [4, 5, 6, 7];
+export { PlanWeekAccordionItem, FREQUENCY_OPTIONS };
 
 export default function PlanificacionScreen() {
   const [weeks, setWeeks] = useState<MesocycleWeek[]>([]);
@@ -52,7 +51,6 @@ export default function PlanificacionScreen() {
     sessionOrdinal: number;
     config: PlannedSessionConfig;
   } | null>(null);
-  const [expandedWeekIds, setExpandedWeekIds] = useState<Record<number, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [confirmModalConfig, setConfirmModalConfig] = useState<{
     visible: boolean;
@@ -66,6 +64,7 @@ export default function PlanificacionScreen() {
 
   const currentSessionIndex = useSessionStore((s) => s.currentSessionIndex);
   const currentBlock = useSessionStore((s) => s.currentBlock);
+  const forceAdvanceWeek = useSessionStore((s) => s.forceAdvanceWeek);
   const commentDebounceRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
   useEffect(() => {
@@ -100,13 +99,6 @@ export default function PlanificacionScreen() {
       void loadMesocycleData();
     }, [loadMesocycleData]),
   );
-
-  const toggleExpandWeek = (weekId: number) => {
-    setExpandedWeekIds((prev) => ({
-      ...prev,
-      [weekId]: !prev[weekId],
-    }));
-  };
 
   const handleAddWeek = async (defaultType: PlannedWeekType = 'CARGA') => {
     if (weeks.length >= 10) {
@@ -165,7 +157,6 @@ export default function PlanificacionScreen() {
     );
     await MesocycleRepository.updateWeekType(week.id, newType);
 
-    // Si es la semana activa en curso, sincronizar en tiempo real con el bloque actual de Entrenar
     if (week.is_current && currentBlock) {
       await WorkoutRepository.updateBlockType(
         currentBlock.id,
@@ -186,7 +177,14 @@ export default function PlanificacionScreen() {
     );
     await MesocycleRepository.setActiveWeek(week.id);
 
-    if (currentBlock) {
+    const completedInCurrent = Math.max(0, currentBlock?.sessionCount ?? 0);
+    if (!currentBlock || completedInCurrent > 0) {
+      // Si el bloque anterior tenía sesiones registradas, iniciar un nuevo bloque desde Sesión 1/N
+      await WorkoutRepository.createBlock(
+        plannedTypeToBlockType(week.type),
+        week.total_planned_sessions,
+      );
+    } else {
       await WorkoutRepository.updateBlockType(
         currentBlock.id,
         plannedTypeToBlockType(week.type),
@@ -199,22 +197,21 @@ export default function PlanificacionScreen() {
     await syncWithSessionStore();
   };
 
-  const handleChangePlannedSessions = async (
-    week: MesocycleWeek,
-    newTotal: number,
-  ) => {
-    if (week.total_planned_sessions === newTotal) return;
+  const handleUpdateWeekSessions = async (weekId: number, newTotal: number) => {
+    const targetWeek = weeks.find((w) => w.id === weekId);
+    if (!targetWeek || targetWeek.total_planned_sessions === newTotal) return;
 
     setWeeks((prev) =>
       prev.map((w) =>
-        w.id === week.id ? { ...w, total_planned_sessions: newTotal } : w,
+        w.id === weekId ? { ...w, total_planned_sessions: newTotal } : w,
       ),
     );
-    await MesocycleRepository.updateWeekPlannedSessions(week.id, newTotal);
+    await MesocycleRepository.updateWeekPlannedSessions(weekId, newTotal);
 
-    if (week.is_current && currentBlock) {
+    if (targetWeek.is_current && currentBlock) {
       await WorkoutRepository.updateBlockTargetSessions(currentBlock.id, newTotal);
     }
+    await loadMesocycleData();
     await syncWithSessionStore();
   };
 
@@ -258,6 +255,30 @@ export default function PlanificacionScreen() {
     await useSessionStore.getState().loadPlanningContext();
   };
 
+  const handleForceCloseActiveWeek = (week: MesocycleWeek) => {
+    const completed = Math.max(0, currentBlock?.sessionCount ?? 0);
+    promptForceCloseWeek(
+      week.week_number,
+      completed,
+      week.total_planned_sessions,
+      async () => {
+        await forceAdvanceWeek();
+        await loadMesocycleData();
+        const sessionState = useSessionStore.getState();
+        const workoutState = useWorkoutStore.getState();
+        if (!sessionState.isActive) {
+          workoutState.resetWorkout();
+          if (sessionState.activeWeek) {
+            workoutState.hydratePreloadedSession(
+              sessionState.activeSessionTargetMuscles,
+              sessionState.activeSessionPresetExerciseIds,
+            );
+          }
+        }
+      },
+    );
+  };
+
   const handleDeleteWeek = (week: MesocycleWeek) => {
     setConfirmModalConfig({
       visible: true,
@@ -293,6 +314,8 @@ export default function PlanificacionScreen() {
     });
   };
 
+  const completedInBlock = Math.max(0, currentBlock?.sessionCount ?? 0);
+
   return (
     <KeyboardAvoidingView
       style={GLOBAL_STYLES.container}
@@ -317,7 +340,7 @@ export default function PlanificacionScreen() {
         </View>
 
         <Text style={styles.descriptionText}>
-          Configura tus bloques de Carga y Descarga con objetivos semanales y notas tácticas por sesión ordinal (1/7 a 7/7). Puedes modificar cualquier etiqueta en tiempo real sin romper tu historial.
+          Configura tus bloques de Carga y Descarga con objetivos semanales y notas tácticas por sesión ordinal (3 a 7 sesiones). La semana activa inicia expandida y las demás contraídas.
         </Text>
 
         {isLoading ? (
@@ -383,369 +406,34 @@ export default function PlanificacionScreen() {
             </View>
           </View>
         ) : (
-          /* Lista de Semanas Planificadas (1 a 10) */
+          /* Lista de Semanas Planificadas (Acordeón: activa expandida, resto contraídas) */
           <>
-            {weeks.map((week) => {
-              const isCarga = week.type === 'CARGA';
-              const isExpanded = Boolean(expandedWeekIds[week.id]);
-              const weekConfigs = sessionConfigsByWeek[week.id] ?? {};
-              const configuredNotesCount = Object.values(weekConfigs).filter(
-                (c) =>
-                  (c.session_note && c.session_note.trim().length > 0) ||
-                  (c.target_muscles && c.target_muscles.length > 0) ||
-                  (c.preset_exercise_ids && c.preset_exercise_ids.length > 0),
-              ).length;
-
-              return (
-                <View
-                  key={week.id}
-                  style={[
-                    styles.weekCard,
-                    week.is_current && styles.weekCardActive,
-                  ]}
-                >
-                  {/* Fila superior: Número de semana + Estado Activo + Borrar */}
-                  <View style={styles.weekTopRow}>
-                    <View style={styles.weekTitleGroup}>
-                      <View
-                        style={[
-                          styles.weekNumberBadge,
-                          week.is_current && styles.weekNumberBadgeActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.weekNumberText,
-                            week.is_current && styles.weekNumberTextActive,
-                          ]}
-                        >
-                          S{week.week_number}
-                        </Text>
-                      </View>
-                      <View>
-                        <Text style={styles.weekTitle}>
-                          Semana {week.week_number}
-                        </Text>
-                        {week.is_current ? (
-                          <Text style={styles.activeSessionSubtext}>
-                            En ejecución • Sesión {currentSessionIndex}/
-                            {week.total_planned_sessions}
-                          </Text>
-                        ) : (
-                          <Text style={styles.inactiveSubtext}>
-                            {week.total_planned_sessions} sesiones programadas
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-
-                    <View style={styles.weekRightActions}>
-                      {week.is_current ? (
-                        <View style={styles.activeBadgePill}>
-                          <CheckCircle2 size={13} color={COLORS.timerSurface} />
-                          <Text style={styles.activeBadgePillText}>ACTIVA</Text>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.activateWeekBtn}
-                          onPress={() => void handleSetActiveWeek(week)}
-                          activeOpacity={0.75}
-                        >
-                          <Text style={styles.activateWeekBtnText}>
-                            Activar
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-
-                      <TouchableOpacity
-                        style={styles.deleteWeekBtn}
-                        onPress={() => handleDeleteWeek(week)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      >
-                        <Trash2 size={16} color={COLORS.danger} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-
-                  {/* Selector Flexible de Etiqueta: CARGA vs DESCARGA */}
-                  <View style={styles.typeToggleRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.typeOptionBtn,
-                        isCarga && styles.typeOptionBtnCargaActive,
-                      ]}
-                      onPress={() => void handleToggleWeekType(week, 'CARGA')}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.typeOptionText,
-                          isCarga && styles.typeOptionTextCargaActive,
-                        ]}
-                      >
-                        CARGA
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.typeOptionBtn,
-                        !isCarga && styles.typeOptionBtnDescargaActive,
-                      ]}
-                      onPress={() => void handleToggleWeekType(week, 'DESCARGA')}
-                      activeOpacity={0.8}
-                    >
-                      <Text
-                        style={[
-                          styles.typeOptionText,
-                          !isCarga && styles.typeOptionTextDescargaActive,
-                        ]}
-                      >
-                        DESCARGA
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* Selector de Cuota de Sesiones del Bloque (ej. 4, 5, 6, 7 sesiones) */}
-                  <View style={styles.quotaRow}>
-                    <Text style={styles.fieldLabel}>
-                      SESIONES DEL BLOQUE:
-                    </Text>
-                    <View style={styles.quotaChipsGroup}>
-                      {SESSION_QUOTA_OPTIONS.map((count) => {
-                        const selected = week.total_planned_sessions === count;
-                        return (
-                          <TouchableOpacity
-                            key={count}
-                            style={[
-                              styles.quotaChip,
-                              selected && styles.quotaChipSelected,
-                            ]}
-                            onPress={() =>
-                              void handleChangePlannedSessions(week, count)
-                            }
-                            activeOpacity={0.75}
-                          >
-                            <Text
-                              style={[
-                                styles.quotaChipText,
-                                selected && styles.quotaChipTextSelected,
-                              ]}
-                            >
-                              {count}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-
-                  {/* Comentario por Semana (Nivel Bloque) */}
-                  <View style={styles.commentSection}>
-                    <Text style={styles.fieldLabel}>
-                      OBJETIVO / COMENTARIO SEMANAL
-                    </Text>
-                    <TextInput
-                      style={styles.commentInput}
-                      value={week.week_comment ?? ''}
-                      onChangeText={(txt) =>
-                        handleChangeWeekComment(week.id, txt)
-                      }
-                      placeholder="Ej. Acumulación de volumen en banca y sentadilla; mantener RIR 2"
-                      placeholderTextColor={COLORS.textSecondary}
-                      multiline={true}
-                      blurOnSubmit={false}
-                      returnKeyType="default"
-                      textAlignVertical="top"
-                    />
-                  </View>
-
-                  {/* Desplegable de Notas Tácticas por Sesión Ordinal (1/N a N/N) */}
-                  <TouchableOpacity
-                    style={styles.sessionNotesToggleBtn}
-                    onPress={() => toggleExpandWeek(week.id)}
-                    activeOpacity={0.75}
-                  >
-                    <View style={styles.sessionNotesToggleLeft}>
-                      <FileText size={15} color={COLORS.primaryDark} />
-                      <Text style={styles.sessionNotesToggleText}>
-                        Notas por Sesión (1/{week.total_planned_sessions} a{' '}
-                        {week.total_planned_sessions}/
-                        {week.total_planned_sessions})
-                      </Text>
-                      {configuredNotesCount > 0 && (
-                        <View style={styles.notesCountBadge}>
-                          <Text style={styles.notesCountBadgeText}>
-                            {configuredNotesCount}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    {isExpanded ? (
-                      <ChevronUp size={16} color={COLORS.textSecondary} />
-                    ) : (
-                      <ChevronDown size={16} color={COLORS.textSecondary} />
-                    )}
-                  </TouchableOpacity>
-
-                  {isExpanded && (
-                    <View style={styles.sessionNotesList}>
-                      {Array.from(
-                        { length: week.total_planned_sessions },
-                        (_, idx) => idx + 1,
-                      ).map((sessionOrd) => {
-                        const isCurrentOrd =
-                          week.is_current &&
-                          currentSessionIndex === sessionOrd;
-                        const config = weekConfigs[sessionOrd];
-                        const hasNote = Boolean(
-                          config?.session_note &&
-                            config.session_note.trim().length > 0,
-                        );
-                        const hasMuscles = Boolean(
-                          config?.target_muscles &&
-                            config.target_muscles.length > 0,
-                        );
-                        const hasPresets = Boolean(
-                          config?.preset_exercise_ids &&
-                            config.preset_exercise_ids.length > 0,
-                        );
-                        const isConfigured =
-                          hasNote || hasMuscles || hasPresets;
-
-                        return (
-                          <TouchableOpacity
-                            key={sessionOrd}
-                            style={[
-                              styles.sessionCardItem,
-                              isCurrentOrd && styles.sessionCardItemCurrent,
-                            ]}
-                            onPress={() =>
-                              setActiveConfigModal({
-                                visible: true,
-                                week,
-                                sessionOrdinal: sessionOrd,
-                                config: config ?? {
-                                  session_note: '',
-                                  target_muscles: [],
-                                  preset_exercise_ids: [],
-                                },
-                              })
-                            }
-                            activeOpacity={0.75}
-                          >
-                            <View style={styles.sessionCardHeader}>
-                              <View style={styles.sessionCardHeaderLeft}>
-                                <Text
-                                  style={[
-                                    styles.sessionOrdinalLabel,
-                                    isCurrentOrd &&
-                                      styles.sessionOrdinalLabelCurrent,
-                                  ]}
-                                >
-                                  Sesión {sessionOrd}/
-                                  {week.total_planned_sessions}
-                                </Text>
-                                {isCurrentOrd && (
-                                  <Text style={styles.currentOrdTag}>
-                                    • SESIÓN ACTUAL
-                                  </Text>
-                                )}
-                              </View>
-
-                              <View style={styles.sessionCardConfigTrigger}>
-                                <Sliders
-                                  size={13}
-                                  color={
-                                    isConfigured
-                                      ? COLORS.primary
-                                      : COLORS.textSecondary
-                                  }
-                                />
-                                <Text
-                                  style={[
-                                    styles.sessionCardConfigTriggerText,
-                                    isConfigured &&
-                                      styles.sessionCardConfigTriggerTextActive,
-                                  ]}
-                                >
-                                  {isConfigured ? 'Configurado' : 'Configurar'}
-                                </Text>
-                                <ChevronRight
-                                  size={13}
-                                  color={COLORS.textSecondary}
-                                />
-                              </View>
-                            </View>
-
-                            {/* Vista previa de configuración */}
-                            {isConfigured ? (
-                              <View style={styles.sessionCardBody}>
-                                {hasNote && (
-                                  <Text
-                                    style={styles.sessionPreviewNote}
-                                    numberOfLines={2}
-                                  >
-                                    {config.session_note}
-                                  </Text>
-                                )}
-
-                                <View style={styles.sessionPreviewBadgesRow}>
-                                  {hasMuscles && (
-                                    <View style={styles.sessionPreviewMuscles}>
-                                      {config.target_muscles.map((m) => (
-                                        <View
-                                          key={m}
-                                          style={
-                                            styles.sessionPreviewMuscleBadge
-                                          }
-                                        >
-                                          <Text
-                                            style={
-                                              styles.sessionPreviewMuscleBadgeText
-                                            }
-                                          >
-                                            {m}
-                                          </Text>
-                                        </View>
-                                      ))}
-                                    </View>
-                                  )}
-
-                                  {hasPresets && (
-                                    <View
-                                      style={styles.sessionPreviewPresetsBadge}
-                                    >
-                                      <Dumbbell
-                                        size={11}
-                                        color={COLORS.primary}
-                                      />
-                                      <Text
-                                        style={styles.sessionPreviewPresetsText}
-                                      >
-                                        {config.preset_exercise_ids.length}{' '}
-                                        {config.preset_exercise_ids.length === 1
-                                          ? 'ejercicio'
-                                          : 'ejercicios'}
-                                      </Text>
-                                    </View>
-                                  )}
-                                </View>
-                              </View>
-                            ) : (
-                              <Text style={styles.sessionPlaceholderText}>
-                                Toca para directriz táctica y pre-carga
-                                opcional...
-                              </Text>
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  )}
-                </View>
-              );
-            })}
+            {weeks.map((week) => (
+              <WeekPlanningCard
+                key={`${week.id}-${week.is_current ? 'active' : 'idle'}`}
+                week={week}
+                isActive={week.is_current}
+                currentSessionIndex={currentSessionIndex}
+                completedSessionsInBlock={completedInBlock}
+                weekConfigs={sessionConfigsByWeek[week.id] ?? {}}
+                onActivate={() => void handleSetActiveWeek(week)}
+                onDelete={() => handleDeleteWeek(week)}
+                onToggleType={(newType) => void handleToggleWeekType(week, newType)}
+                onUpdateSessions={(weekId, num) =>
+                  void handleUpdateWeekSessions(weekId, num)
+                }
+                onChangeComment={handleChangeWeekComment}
+                onOpenSessionConfig={(targetWeek, sessionOrdinal, config) =>
+                  setActiveConfigModal({
+                    visible: true,
+                    week: targetWeek,
+                    sessionOrdinal,
+                    config,
+                  })
+                }
+                onForceAdvanceWeek={() => handleForceCloseActiveWeek(week)}
+              />
+            ))}
 
             {/* Botones inferiores para añadir semanas (hasta 10) o limpiar */}
             {weeks.length < 10 && (
@@ -831,7 +519,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: SPACING.md,
     paddingTop: 50,
-    paddingBottom: 120, // Margen extra inferior para que nunca quede al ras sobre el teclado ni la barra de navegación
+    paddingBottom: 120,
   },
   headerRow: {
     flexDirection: 'row',
@@ -949,337 +637,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 12,
     fontWeight: '700',
-  },
-  weekCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: 16,
-    padding: SPACING.md,
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  weekCardActive: {
-    borderWidth: 2,
-    borderColor: COLORS.primaryDark,
-  },
-  weekTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  weekTitleGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  weekNumberBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: COLORS.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekNumberBadgeActive: {
-    backgroundColor: COLORS.timerSurface,
-    borderColor: COLORS.timerSurface,
-  },
-  weekNumberText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-  },
-  weekNumberTextActive: {
-    color: COLORS.primary,
-  },
-  weekTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-  },
-  activeSessionSubtext: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  inactiveSubtext: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: COLORS.textSecondary,
-    marginTop: 2,
-  },
-  weekRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  activeBadgePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  activeBadgePillText: {
-    color: COLORS.textInverted,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
-  activateWeekBtn: {
-    backgroundColor: COLORS.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  activateWeekBtnText: {
-    color: COLORS.textPrimary,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  deleteWeekBtn: {
-    padding: 9,
-    borderRadius: 8,
-    backgroundColor: COLORS.surfaceHighlight,
-  },
-  typeToggleRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  typeOptionBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: COLORS.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    alignItems: 'center',
-  },
-  typeOptionBtnCargaActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  typeOptionBtnDescargaActive: {
-    backgroundColor: COLORS.btnSecondary,
-    borderColor: COLORS.border,
-  },
-  typeOptionText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.textSecondary,
-  },
-  typeOptionTextCargaActive: {
-    color: COLORS.textInverted,
-  },
-  typeOptionTextDescargaActive: {
-    color: COLORS.textPrimary,
-  },
-  quotaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.sm,
-    paddingVertical: 4,
-  },
-  fieldLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    color: COLORS.textSecondary,
-    marginBottom: 4,
-  },
-  quotaChipsGroup: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  quotaChip: {
-    minWidth: 36,
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: COLORS.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  quotaChipSelected: {
-    backgroundColor: COLORS.primarySoft,
-    borderColor: COLORS.primary,
-  },
-  quotaChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  quotaChipTextSelected: {
-    color: COLORS.primary,
-    fontWeight: '800',
-  },
-  commentSection: {
-    marginBottom: SPACING.sm,
-  },
-  commentInput: {
-    backgroundColor: COLORS.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    color: COLORS.textBody,
-    fontSize: 14,
-    lineHeight: LINE_HEIGHT.base,
-    minHeight: 48,
-  },
-  sessionNotesToggleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(143, 155, 122, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(143, 155, 122, 0.28)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  sessionNotesToggleLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sessionNotesToggleText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-  },
-  notesCountBadge: {
-    backgroundColor: COLORS.primaryDark,
-    paddingHorizontal: 7,
-    paddingVertical: 1,
-    borderRadius: 999,
-  },
-  notesCountBadgeText: {
-    color: COLORS.surface,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  sessionNotesList: {
-    marginTop: SPACING.sm,
-    gap: SPACING.sm,
-  },
-  sessionCardItem: {
-    backgroundColor: COLORS.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    padding: SPACING.md - 4,
-  },
-  sessionCardItemCurrent: {
-    borderColor: COLORS.primaryBorder,
-    backgroundColor: COLORS.primarySoft,
-  },
-  sessionCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  sessionCardHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  sessionCardConfigTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  sessionCardConfigTriggerText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-  },
-  sessionCardConfigTriggerTextActive: {
-    color: COLORS.primary,
-  },
-  sessionOrdinalLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: COLORS.textPrimary,
-  },
-  sessionOrdinalLabelCurrent: {
-    color: COLORS.primaryDark,
-  },
-  currentOrdTag: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: COLORS.primaryDark,
-    letterSpacing: 0.5,
-  },
-  sessionCardBody: {
-    marginTop: 6,
-  },
-  sessionPreviewNote: {
-    fontSize: 13,
-    color: COLORS.textBody,
-    lineHeight: LINE_HEIGHT.sm,
-    marginBottom: 8,
-  },
-  sessionPreviewBadgesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 2,
-  },
-  sessionPreviewMuscles: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  sessionPreviewMuscleBadge: {
-    backgroundColor: '#1E1E1E',
-    borderWidth: 1,
-    borderColor: '#333333',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  sessionPreviewMuscleBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  sessionPreviewPresetsBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(163, 230, 53, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(163, 230, 53, 0.3)',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  sessionPreviewPresetsText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: COLORS.primary,
-  },
-  sessionPlaceholderText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    fontStyle: 'italic',
-    marginTop: 2,
   },
   addWeekButtonsRow: {
     flexDirection: 'row',
