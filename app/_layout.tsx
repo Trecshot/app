@@ -15,7 +15,7 @@ void SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
   const [appIsReady, setAppIsReady] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
+  const [animationFinished, setAnimationFinished] = useState(false);
 
   useEffect(() => {
     async function prepare() {
@@ -49,15 +49,13 @@ export default function RootLayout() {
     return () => subscription.remove();
   }, [appIsReady]);
 
-  if (!appIsReady || showSplash) {
+  if (!appIsReady || !animationFinished) {
     return (
       <View style={{ flex: 1, backgroundColor: '#000000' }}>
         <StatusBar style="light" />
         <AnimatedSplashScreen
           onAnimationFinish={() => {
-            if (appIsReady) {
-              setShowSplash(false);
-            }
+            setAnimationFinished(true);
           }}
         />
       </View>

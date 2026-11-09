@@ -520,10 +520,10 @@ de registros, se implemento una estrategia dual de persistencia y respaldo:
      * Brazos: Curl en Banco Inclinado con Mancuernas, Press Banca con Agarre Estrecho (Close-Grip Bench Press), Extensiones Katana en Polea (Triceps Katana Extension).
      * Core: Pallof Press en Polea / Elástico, Paseo del Granjero (Farmer's Walk).
 
-9. Animacion Neon / Tubo LED de Encendido (`AnimatedSplashScreen.tsx`):
-   - Se creo el componente de splash interactivo con `react-native-reanimated` (`src/components/AnimatedSplashScreen.tsx`) y los assets en `assets/images/dumbbell_glow.png`.
-   - Implementa secuencia de parpadeo neón (destello inicial tenue, apagado rápido, destello fuerte y estabilización con resplandor glow y efecto de expansión sutil).
-   - Se integro en `app/_layout.tsx` ocultando el splash nativo estático y liberando la interfaz fluida a 60 FPS una vez culminada la animación y cargada la base de datos SQLite.
+9. Animacion Neon con Barrido y Mascara de Recorte (`AnimatedSplashScreen.tsx`):
+   - Se integraron las librerias oficiales `@react-native-masked-view/masked-view` y `expo-linear-gradient` para renderizar un efecto de barrido/llenado progresivo (Shimmer / Wipe sweep) nativo a 60 FPS sin requerir SVG.
+   - La silueta de la mancuerna inicia en el fondo como una silueta tenue/metalica (`tintColor: '#225522'`, opacidad 0.15) mientras una mascara animada revela el haz de luz en degradado neón (`#39FF14`) cruzando en diagonal. Al completarse el barrido, se dispara un destello de brillo antes de dar paso a la pantalla principal.
+   - Se integro en `app/_layout.tsx` sincronizando de forma segura la inicializacion de la base de datos SQLite y el cierre de la animacion de bienvenida.
 
 ================================================================================
 15. ESTADO ACTUAL DE CALIDAD Y CODIGO

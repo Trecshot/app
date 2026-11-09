@@ -1,75 +1,101 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
+import RawMaskedView from '@react-native-masked-view/masked-view';
+import type { MaskedViewProps } from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSequence,
   withTiming,
   withDelay,
-  runOnJS,
   Easing,
+  runOnJS,
 } from 'react-native-reanimated';
 
+const MaskedView = RawMaskedView as unknown as React.ComponentType<MaskedViewProps>;
+
 const { width } = Dimensions.get('window');
-const ICON_SIZE = width * 0.55;
+const ICON_SIZE = width * 0.58;
+
+const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 
 export interface AnimatedSplashScreenProps {
   onAnimationFinish?: () => void;
 }
 
 export default function AnimatedSplashScreen({ onAnimationFinish }: AnimatedSplashScreenProps) {
-  const glowOpacity = useSharedValue(0);
-  const scale = useSharedValue(0.96);
+  // Posición del barrido de luz (de -ICON_SIZE a +ICON_SIZE)
+  const sweepProgress = useSharedValue(-ICON_SIZE * 1.5);
+  const glowBurst = useSharedValue(0.7);
 
   useEffect(() => {
-    // Secuencia de encendido tipo tubo LED / Neón
-    glowOpacity.value = withSequence(
-      withDelay(300, withTiming(0.4, { duration: 70 })), // Primer destello
-      withTiming(0.05, { duration: 60 }), // Se apaga casi por completo
-      withTiming(0.85, { duration: 90 }), // Segundo destello fuerte
-      withTiming(0.2, { duration: 80 }), // Caída breve
-      withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) }), // Encendido total
-      withDelay(
-        700,
-        withTiming(1, { duration: 200 }, (finished) => {
-          if (finished && onAnimationFinish) {
-            runOnJS(onAnimationFinish)();
+    // 1. Barrido continuo que va encendiendo la mancuerna
+    sweepProgress.value = withDelay(
+      200,
+      withTiming(
+        ICON_SIZE * 1.5,
+        {
+          duration: 1200,
+          easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+        },
+        (finished) => {
+          if (finished) {
+            // Destello final de confirmación cuando queda encendida por completo
+            glowBurst.value = withTiming(1, { duration: 250 }, () => {
+              if (onAnimationFinish) {
+                runOnJS(onAnimationFinish)();
+              }
+            });
           }
-        }),
+        },
       ),
     );
+  }, [glowBurst, onAnimationFinish, sweepProgress]);
 
-    // Ligero "pop" o expansión al momento de estabilizarse la luz
-    scale.value = withSequence(
-      withDelay(500, withTiming(1.04, { duration: 200 })),
-      withTiming(1, { duration: 150 }),
-    );
-  }, [glowOpacity, scale, onAnimationFinish]);
-
-  const animatedGlowStyle = useAnimatedStyle(() => ({
-    opacity: glowOpacity.value,
-    transform: [{ scale: scale.value }],
+  // Estilo animado para mover el degradado de luz
+  const sweepStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: sweepProgress.value }],
   }));
 
-  const baseStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+  const containerGlowStyle = useAnimatedStyle(() => ({
+    opacity: glowBurst.value,
   }));
 
   return (
     <View style={styles.container}>
-      {/* Capa 1: Mancuerna apagada / tenue */}
-      <Animated.Image
-        source={require('../../assets/images/dumbbell_glow.png')}
-        style={[styles.image, styles.dimmedBase, baseStyle]}
-        resizeMode="contain"
-      />
+      <Animated.View style={[styles.iconWrapper, containerGlowStyle]}>
+        {/* Capa 1: Mancuerna apagada (silueta oscura fija de fondo) */}
+        <Animated.Image
+          source={require('../../assets/images/dumbbell_glow.png')}
+          style={[styles.image, styles.dimmedBase]}
+          resizeMode="contain"
+        />
 
-      {/* Capa 2: Mancuerna con luz verde neón sobrepuesta */}
-      <Animated.Image
-        source={require('../../assets/images/dumbbell_glow.png')}
-        style={[styles.image, styles.glowLayer, animatedGlowStyle]}
-        resizeMode="contain"
-      />
+        {/* Capa 2: Efecto de barrido que va encendiendo la imagen brillante */}
+        <MaskedView
+          style={styles.maskContainer}
+          maskElement={
+            <Animated.Image
+              source={require('../../assets/images/dumbbell_glow.png')}
+              style={styles.image}
+              resizeMode="contain"
+            />
+          }
+        >
+          {/* Luz LED / Neón que cruza la mancuerna y la rellena de color */}
+          <AnimatedLinearGradient
+            colors={[
+              'rgba(74, 222, 128, 0)', // Transparente adelante
+              'rgba(74, 222, 128, 0.4)', // Halo de avance
+              '#39FF14', // Núcleo verde neón encendido
+              '#39FF14', // Mantiene el color lleno hacia atrás
+            ]}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.sweepGradient, sweepStyle]}
+          />
+        </MaskedView>
+      </Animated.View>
     </View>
   );
 }
@@ -81,20 +107,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconWrapper: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   image: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    position: 'absolute',
   },
   dimmedBase: {
-    opacity: 0.12, // Silueta tenue de fondo antes de encender
+    position: 'absolute',
+    opacity: 0.15, // Se ve la forma pero sin luz
+    tintColor: '#225522', // Opcional: le da un tono apagado/metálico antes de prender
   },
-  glowLayer: {
-    // Sombra exterior para simular la dispersión del LED verde
-    shadowColor: '#4ADE80',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 20,
-    elevation: 15,
+  maskContainer: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
+  },
+  sweepGradient: {
+    width: ICON_SIZE * 3,
+    height: ICON_SIZE * 3,
+    position: 'absolute',
+    top: -ICON_SIZE,
+    left: -ICON_SIZE,
   },
 });
