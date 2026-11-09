@@ -520,10 +520,13 @@ de registros, se implemento una estrategia dual de persistencia y respaldo:
      * Brazos: Curl en Banco Inclinado con Mancuernas, Press Banca con Agarre Estrecho (Close-Grip Bench Press), Extensiones Katana en Polea (Triceps Katana Extension).
      * Core: Pallof Press en Polea / Elástico, Paseo del Granjero (Farmer's Walk).
 
-9. Animacion Neon con Barrido y Mascara de Recorte (`AnimatedSplashScreen.tsx`):
-   - Se integraron las librerias oficiales `@react-native-masked-view/masked-view` y `expo-linear-gradient` para renderizar un efecto de barrido/llenado progresivo (Shimmer / Wipe sweep) nativo a 60 FPS sin requerir SVG.
-   - La silueta de la mancuerna inicia en el fondo como una silueta tenue/metalica (`tintColor: '#225522'`, opacidad 0.15) mientras una mascara animada revela el haz de luz en degradado neón (`#39FF14`) cruzando en diagonal. Al completarse el barrido, se dispara un destello de brillo antes de dar paso a la pantalla principal.
-   - Se integro en `app/_layout.tsx` sincronizando de forma segura la inicializacion de la base de datos SQLite y el cierre de la animacion de bienvenida.
+9. Animacion Neon con Revelado Progresivo de Imagen Real (`AnimatedSplashScreen.tsx`):
+   - Se implemento la tecnica de revelado progresivo a 60 FPS con `react-native-reanimated` mediante recorte en `revealBox` (`overflow: 'hidden'`) sobre la imagen original.
+   - Preserva el 100% de la resolucion, detalles y resplandor verde neon nativo de la imagen:
+     * Capa 1: Silueta tenue de fondo (`opacity: 0.1`).
+     * Capa 2: Contenedor animado que expande `revealWidth` de 0 a `ICON_SIZE` con curva Bézier suave (`0.16, 1, 0.3, 1`), llenando la mancuerna de forma natural sin distorsiones.
+     * Capa 3: Destello final de brillo LED verde (`glowOverlay` con `opacity` pulsante) antes de finalizar.
+   - Totalmente integrado en `app/_layout.tsx` sin parpadeos ni condiciones de carrera con SQLite.
 
 ================================================================================
 15. ESTADO ACTUAL DE CALIDAD Y CODIGO
