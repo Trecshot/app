@@ -520,6 +520,11 @@ de registros, se implemento una estrategia dual de persistencia y respaldo:
      * Brazos: Curl en Banco Inclinado con Mancuernas, Press Banca con Agarre Estrecho (Close-Grip Bench Press), Extensiones Katana en Polea (Triceps Katana Extension).
      * Core: Pallof Press en Polea / Elástico, Paseo del Granjero (Farmer's Walk).
 
+9. Animacion Neon / Tubo LED de Encendido (`AnimatedSplashScreen.tsx`):
+   - Se creo el componente de splash interactivo con `react-native-reanimated` (`src/components/AnimatedSplashScreen.tsx`) y los assets en `assets/images/dumbbell_glow.png`.
+   - Implementa secuencia de parpadeo neón (destello inicial tenue, apagado rápido, destello fuerte y estabilización con resplandor glow y efecto de expansión sutil).
+   - Se integro en `app/_layout.tsx` ocultando el splash nativo estático y liberando la interfaz fluida a 60 FPS una vez culminada la animación y cargada la base de datos SQLite.
+
 ================================================================================
 15. ESTADO ACTUAL DE CALIDAD Y CODIGO
 ================================================================================

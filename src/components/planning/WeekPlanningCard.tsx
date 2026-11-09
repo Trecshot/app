@@ -14,6 +14,7 @@ import {
   Dumbbell,
   ChevronRight,
   FastForward,
+  Trash2,
 } from 'lucide-react-native';
 import { COLORS, LINE_HEIGHT, SPACING } from '../../theme';
 import type {
@@ -121,14 +122,14 @@ export function PlanWeekAccordionItem({
           )}
 
           <TouchableOpacity
-            style={styles.deleteBtn}
+            style={styles.deleteBadge}
             onPress={(e) => {
               e.stopPropagation();
               onDelete();
             }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.deleteBtnText}>🗑</Text>
+            <Trash2 size={16} color="#FF453A" strokeWidth={2} />
           </TouchableOpacity>
 
           <Text style={styles.accordionChevron}>{isExpanded ? '▲' : '▼'}</Text>
@@ -230,20 +231,24 @@ export function WeekPlanningCard({
       </View>
 
       {/* Selector de Frecuencia (3 a 7 Sesiones) */}
-      <View style={styles.sessionSelectorContainer}>
-        <Text style={styles.sectionLabel}>SESIONES DEL BLOQUE:</Text>
-        <View style={styles.chipsRow}>
+      <View style={styles.frequencySection}>
+        <Text style={styles.sectionLabel}>SESIONES DEL BLOQUE</Text>
+
+        <View style={styles.frequencyRow}>
           {FREQUENCY_OPTIONS.map((num) => {
             const isSelected = normalizedWeek.totalSessions === num;
             return (
               <TouchableOpacity
                 key={num}
-                style={[styles.chipButton, isSelected && styles.chipButtonActive]}
+                style={[styles.freqButton, isSelected && styles.freqButtonActive]}
                 onPress={() => onUpdateSessions(normalizedWeek.id, num)}
-                activeOpacity={0.75}
+                activeOpacity={0.7}
               >
                 <Text
-                  style={[styles.chipText, isSelected && styles.chipTextActive]}
+                  style={[
+                    styles.freqButtonText,
+                    isSelected && styles.freqButtonTextActive,
+                  ]}
                 >
                   {num}
                 </Text>
@@ -497,13 +502,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  deleteBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: COLORS.surfaceHighlight,
-  },
-  deleteBtnText: {
-    fontSize: 14,
+  deleteBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    backgroundColor: '#2A1515',
+    borderWidth: 1,
+    borderColor: '#4A1C1C',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   accordionChevron: {
     color: COLORS.textSecondary,
@@ -549,45 +556,43 @@ const styles = StyleSheet.create({
   typeOptionTextDescargaActive: {
     color: COLORS.textPrimary,
   },
-  sessionSelectorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.sm,
-    paddingVertical: 4,
+  frequencySection: {
+    marginTop: 14,
+    marginBottom: 10,
   },
   sectionLabel: {
+    color: '#8E8E93',
     fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    color: COLORS.textSecondary,
-    marginBottom: 4,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  chipButton: {
-    minWidth: 34,
-    alignItems: 'center',
-    paddingHorizontal: 9,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: COLORS.surfaceHighlight,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  chipButtonActive: {
-    backgroundColor: COLORS.primarySoft,
-    borderColor: COLORS.primary,
-  },
-  chipText: {
-    fontSize: 12,
     fontWeight: '700',
-    color: COLORS.textPrimary,
+    letterSpacing: 0.8,
+    marginBottom: 8,
   },
-  chipTextActive: {
-    color: COLORS.primary,
+  frequencyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+  },
+  freqButton: {
+    flex: 1, // Distribuye los 5 botones exactamente iguales sin desbordar
+    height: 40,
+    backgroundColor: '#1C1C1E',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2C2C2E',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  freqButtonActive: {
+    backgroundColor: '#26381E',
+    borderColor: '#9FE870',
+  },
+  freqButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  freqButtonTextActive: {
+    color: '#9FE870',
     fontWeight: '800',
   },
   commentSection: {
