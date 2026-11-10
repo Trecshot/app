@@ -528,6 +528,13 @@ de registros, se implemento una estrategia dual de persistencia y respaldo:
      * Capa 3: Destello final de brillo LED verde (`glowOverlay` con `opacity` pulsante) antes de finalizar.
    - Totalmente integrado en `app/_layout.tsx` sin parpadeos ni condiciones de carrera con SQLite.
 
+10. Centrado y Corrección de Desbordamiento del Cronómetro Activo (`app/(tabs)/index.tsx`):
+    - Se solucionó el desbordamiento horizontal en la tarjeta unificada donde la etiqueta de estado ("• ENTRENAMIENTO EN CURSO") y el cronómetro compartían la misma fila horizontal, provocando que los segundos (`:00`) y el botón de reinicio (`RotateCcw`) quedaran fuera del borde derecho en pantallas móviles.
+    - Se rediseñó la estructura visual de `activeStopwatchCard`:
+      * Sub-fila superior: Distribuye simétricamente el indicador de estado dinámico (`timerLabelRunning` en verde lima / `timerLabelPaused` en naranja de pausa) a la izquierda y el botón táctil de reinicio (`RotateCcw`) a la derecha.
+      * Sección central (`activeStopwatchCenter`): Ubica el cronómetro de sesión (`SessionStopwatchDisplay`) con tipografía digital destacada (tamaño 34, `fontWeight: '800'`, `tabular-nums`, `letterSpacing: 1.5`), completamente centrado de forma horizontal e independiente del ancho de pantalla.
+    - Cero desbordamientos, legibilidad instantánea a distancia y respuesta táctil óptima.
+
 ================================================================================
 15. ESTADO ACTUAL DE CALIDAD Y CODIGO
 ================================================================================

@@ -529,20 +529,32 @@ export default function ActiveWorkoutScreen() {
             </View>
           ) : null}
 
-          {/* Cronómetro compacto cuando la sesión está activa */}
+          {/* Cronómetro centrado cuando la sesión está activa */}
           {isActive && (
-            <View style={styles.activeStopwatchRow}>
-              <View style={styles.activeStopwatchLeft}>
-                <Text style={styles.timerLabel}>{timerStatus}</Text>
-                <SessionStopwatchDisplay style={styles.compactStopwatchText} />
+            <View style={styles.activeStopwatchCard}>
+              <View style={styles.activeStopwatchHeader}>
+                <Text
+                  style={[
+                    styles.timerLabel,
+                    isRunning ? styles.timerLabelRunning : styles.timerLabelPaused,
+                  ]}
+                >
+                  {timerStatus}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleResetTimer}
+                  style={styles.resetIconButton}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Reiniciar cronómetro"
+                >
+                  <RotateCcw size={15} color={COLORS.textSecondary} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                onPress={handleResetTimer}
-                style={styles.resetIconButton}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <RotateCcw size={16} color={COLORS.textSecondary} />
-              </TouchableOpacity>
+
+              <View style={styles.activeStopwatchCenter}>
+                <SessionStopwatchDisplay style={styles.centeredStopwatchText} />
+              </View>
             </View>
           )}
 
@@ -883,34 +895,48 @@ const styles = StyleSheet.create({
     lineHeight: LINE_HEIGHT.sm,
     marginTop: 6,
   },
-  activeStopwatchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  activeStopwatchCard: {
     backgroundColor: COLORS.surfaceHighlight,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  activeStopwatchLeft: {
+  activeStopwatchHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'space-between',
   },
-  compactStopwatchText: {
-    fontSize: 22,
+  activeStopwatchCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  centeredStopwatchText: {
+    fontSize: 34,
     fontWeight: '800',
+    color: COLORS.textPrimary,
+    fontVariant: ['tabular-nums'],
+    letterSpacing: 1.5,
+    textAlign: 'center',
   },
   timerLabel: {
-    color: COLORS.textSecondary,
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.8,
   },
+  timerLabelRunning: {
+    color: COLORS.primary,
+  },
+  timerLabelPaused: {
+    color: COLORS.pause,
+  },
   resetIconButton: {
     padding: 4,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   startWorkoutButton: {
     flexDirection: 'row',
