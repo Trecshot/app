@@ -48,5 +48,6 @@
     "typecheck": "tsc --noEmit",
     "doctor": "npx expo-doctor"
   },
+  "license": "UNLICENSED",
   "private": true
 }
